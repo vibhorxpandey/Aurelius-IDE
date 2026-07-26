@@ -29,10 +29,22 @@ ROOT_PACKAGE = "aurelius-ide"
 NATIVE_SUFFIXES = (".so", ".pyd", ".dylib")
 
 # Requirement strings carry full PEP 508 markers — `extra == "verify"`, but also
-# `python_version < "3.11"` and `sys_platform == "win32"`. Evaluating only the extras
-# marker made this script demand `exceptiongroup` on Python 3.14, where it is correctly
-# absent. `packaging` is present in any environment that has pip, pytest or build.
-from packaging.requirements import Requirement  # noqa: E402
+# `python_version < "3.11"` and `sys_platform == "win32"`. Evaluating only the extras marker
+# made this script demand `exceptiongroup` on Python 3.14, where it is correctly absent.
+#
+# `packaging` is not guaranteed: it rides along with pytest and build, so it is present in a
+# dev environment but not after a bare `pip install -e ".[lsp]"`. The GitHub Windows runner
+# image happens to ship it and the Linux and macOS ones do not, which is how this passed on
+# one platform and crashed on the other two.
+try:
+    from packaging.requirements import Requirement  # noqa: E402
+except ModuleNotFoundError:  # pragma: no cover - environment-dependent
+    print(
+        "error: this check needs `packaging` to evaluate dependency markers.\n"
+        "       pip install packaging",
+        file=sys.stderr,
+    )
+    raise SystemExit(1) from None
 
 
 def normalise(name: str) -> str:

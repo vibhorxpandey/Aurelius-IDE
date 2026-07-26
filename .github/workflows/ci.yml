@@ -53,7 +53,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[lsp]"
+      # `packaging` is for the check itself, not for the bundle — it evaluates PEP 508
+      # markers. It is not part of the closure being measured.
+      - run: pip install -e ".[lsp]" packaging
       - run: python scripts/check_pure_python.py --extra lsp
 
   extension:

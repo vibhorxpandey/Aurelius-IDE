@@ -1,0 +1,29 @@
+\documentclass[11pt]{article}
+\usepackage{natbib}
+\title{Hybrid Retrieval for Indian Equity Filings}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a hybrid retrieval system. Studies show that dense retrieval
+underperforms on numerical tables.
+\end{abstract}
+
+\section{Introduction}
+Sparse retrieval remains competitive on out-of-domain data \citep{thakur2021beir}.
+Reciprocal rank fusion improves recall by 12\% over single-retriever baselines.
+Prior work demonstrates that cross-encoders add substantial precision.
+As shown in Figure 2, our pipeline has three stages.
+% this comment mentions 45% and should be ignored
+The equation $E = mc^2$ contains no claim at all.
+
+\section{Methods}
+We train BGE-M3 \citep{chen2024bgem3} on 240,000 passages.
+We set the learning rate to 2e-5 over 3 epochs.
+Our reranker is initialised from \citet{nogueira2019passage}.
+
+\section{Results}
+Our system achieves 93\% Recall@1 and 0.967 MRR.
+We compare against \citep{robertson2009bm25} and \cite{ghost2030nonexistent}.
+Retrieval latency fell by 3.2x relative to the dense-only baseline.
+\end{document}

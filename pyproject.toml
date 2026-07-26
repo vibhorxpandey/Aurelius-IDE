@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aurelius-ide"
+version = "0.1.0"
+description = "A language server for research papers: live citation verification and claim analysis for LaTeX."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Vibhor Pandey", email = "vibhorpandey09@gmail.com" }]
+keywords = ["lsp", "latex", "research", "citations", "fact-checking", "bibtex", "academic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Editors :: Integrated Development Environments (IDE)",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+]
+
+# The analysis engine is pure standard library. Both the language-server transport and
+# the scholarly-verification backend are optional, so the core stays installable
+# anywhere and usable headless in CI.
+dependencies = []
+
+[project.optional-dependencies]
+lsp = ["pygls>=2.0"]
+verify = ["aurelius-mcp>=0.6.1"]
+dev = ["pytest>=8", "ruff>=0.6"]
+all = ["pygls>=2.0", "aurelius-mcp>=0.6.1"]
+
+[project.scripts]
+aurelius-lsp = "aurelius_ide.lsp:main"
+
+[project.urls]
+Homepage = "https://github.com/vibhorxpandey/aurelius-ide"
+Repository = "https://github.com/vibhorxpandey/aurelius-ide"
+Issues = "https://github.com/vibhorxpandey/aurelius-ide/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aurelius_ide"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+# The codebase uses `from __future__ import annotations` with the `typing` spelling
+# (List[str], Optional[X]) consistently, in every module. These three rules ask for the
+# builtin spelling instead. Both are correct on the supported Python versions; what
+# matters is picking one, and the existing code already picked. Ignoring them here keeps
+# the choice explicit rather than leaving CI red against 165 findings that are all the
+# same house-style disagreement.
+ignore = ["UP006", "UP007", "UP035"]

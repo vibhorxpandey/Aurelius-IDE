@@ -1,0 +1,56 @@
+"""Aurelius IDE — live research-integrity analysis for LaTeX papers.
+
+A language server that treats a paper like source code: undefined citation keys are
+unresolved symbols, unverifiable references are type errors, and uncited empirical claims
+are lint warnings.
+
+The analysis engine is pure standard library. Scholarly verification is a swappable
+backend (see :mod:`aurelius_ide.verification`); the LSP transport needs ``pygls`` and
+installs via the ``lsp`` extra.
+
+    from aurelius_ide import AnalysisEngine
+
+    engine = AnalysisEngine()
+    for d in engine.analyze_now("file:///paper.tex", tex_source, bib_text=bib_source):
+        print(d.severity.name, d.code, d.message)
+"""
+from .cache import ResultCache
+from .compiling import CompileGate, CompileRunner, DockerRunner, SubprocessRunner, default_gate
+from .diagnostics import Code, Diagnostic, Severity
+from .document import BibEntry, CiteKeyRef, Position, Range, ResearchDocument
+from .engine import AnalysisEngine
+from .verification import (
+    AureliusVerifier,
+    NullVerifier,
+    VerdictKind,
+    Verifier,
+    get_default_verifier,
+    set_default_verifier,
+)
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "__version__",
+    "AnalysisEngine",
+    "ResearchDocument",
+    "Diagnostic",
+    "Severity",
+    "Code",
+    "ResultCache",
+    "BibEntry",
+    "CiteKeyRef",
+    "Position",
+    "Range",
+    "Verifier",
+    "VerdictKind",
+    "AureliusVerifier",
+    "NullVerifier",
+    "get_default_verifier",
+    "set_default_verifier",
+    "CompileGate",
+    "CompileRunner",
+    "SubprocessRunner",
+    "DockerRunner",
+    "default_gate",
+]

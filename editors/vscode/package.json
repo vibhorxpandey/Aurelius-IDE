@@ -1,0 +1,67 @@
+{
+  "name": "aurelius-ide",
+  "displayName": "Aurelius — Research Paper Linter",
+  "description": "Live citation verification and claim analysis for LaTeX papers.",
+  "version": "0.1.0",
+  "publisher": "vibhorxpandey",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/vibhorxpandey/aurelius-ide" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Programming Languages"],
+  "keywords": ["latex", "bibtex", "citations", "research", "academic"],
+  "activationEvents": ["onLanguage:latex", "onLanguage:tex", "onLanguage:bibtex"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aurelius.restart",
+        "title": "Aurelius: Restart Language Server"
+      },
+      {
+        "command": "aurelius.verifyAll",
+        "title": "Aurelius: Verify Entire Bibliography"
+      }
+    ],
+    "configuration": {
+      "title": "Aurelius",
+      "properties": {
+        "aurelius.serverPath": {
+          "type": "string",
+          "default": "aurelius-lsp",
+          "description": "Path to the aurelius-lsp executable."
+        },
+        "aurelius.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python interpreter to run the server with. Leave empty to use aurelius-lsp directly from PATH."
+        },
+        "aurelius.claims.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Flag empirical claims that carry no citation."
+        },
+        "aurelius.verification.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check citations against scholarly indexes. Requires the 'verify' extra."
+        },
+        "aurelius.debounceMs": {
+          "type": "number",
+          "default": 700,
+          "description": "Quiet period before background verification runs."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": { "vscode-languageclient": "^9.0.1" },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}

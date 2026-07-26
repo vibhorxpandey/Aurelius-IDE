@@ -1,7 +1,11 @@
-"""The verification boundary.
+"""The scholarly-index boundary.
 
-This is the only module that knows how a citation gets checked. Everything else depends
-on the :class:`Verifier` protocol, which keeps three things true:
+This is the only module that reaches the network — both to *check* a citation the author
+already wrote (:class:`Verifier`) and to *find* one they haven't (:class:`Searcher`). Both
+live here rather than in a second module so that "what does this tool talk to?" has one
+answer, auditable by reading one file.
+
+Everything else depends on the :class:`Verifier` protocol, which keeps three things true:
 
 * **The IDE has one soft dependency, isolated here.** ``aurelius-mcp`` supplies the
   scholarly lookup (OpenAlex → Crossref → arXiv → Semantic Scholar). If it isn't
@@ -170,7 +174,180 @@ class AureliusVerifier:
         return result
 
 
+# --------------------------------------------------------------------------------------
+# Literature search — the other direction across the same boundary
+# --------------------------------------------------------------------------------------
+
+
+@runtime_checkable
+class Searcher(Protocol):
+    """Finds candidate works for a free-text query."""
+
+    name: str
+
+    def search(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        """Return candidate records, best match first.
+
+        Each record carries ``key``, ``title``, ``authors`` (list), ``year``, ``doi``,
+        ``venue``, ``cited_by`` and ``bibtex``. An empty list means "nothing found"; a
+        failure to reach the index raises, so the caller can tell the two apart.
+        """
+        ...
+
+
+class NullSearcher:
+    """Fallback when no search backend is configured. Finds nothing, fails loudly."""
+
+    name = "null"
+
+    def search(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        raise RuntimeError("No literature-search backend is configured.")
+
+
+class OpenAlexSearcher:
+    """Keyless literature search against OpenAlex, using only the standard library.
+
+    Deliberately *not* routed through ``aurelius-mcp``. Search is the feature that gets a
+    new user to their first verified citation, so it must work on a bare
+    ``pip install aurelius-ide`` with no extras and no API key. OpenAlex is free, keyless,
+    and asks only that you identify yourself — hence the mailto in the User-Agent, which
+    is their documented way into the faster rate-limit pool.
+    """
+
+    name = "openalex"
+    endpoint = "https://api.openalex.org/works"
+
+    def __init__(self, mailto: str = "", timeout: float = 8.0) -> None:
+        self.mailto = mailto
+        self.timeout = timeout
+
+    def search(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        import json
+        import urllib.parse
+        import urllib.request
+
+        query = query.strip()
+        if not query:
+            return []
+
+        params = {"search": query, "per-page": str(max(1, min(limit, 25)))}
+        if self.mailto:
+            params["mailto"] = self.mailto
+        url = f"{self.endpoint}?{urllib.parse.urlencode(params)}"
+
+        agent = "aurelius-ide"
+        if self.mailto:
+            agent += f" (mailto:{self.mailto})"
+        request = urllib.request.Request(url, headers={"User-Agent": agent})
+
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        return [_record_from_openalex(w) for w in payload.get("results", [])]
+
+
+def _record_from_openalex(work: dict[str, Any]) -> dict[str, Any]:
+    """Flatten one OpenAlex work into the shape the editor consumes."""
+    authors = [
+        a.get("author", {}).get("display_name", "")
+        for a in work.get("authorships", [])
+        if a.get("author", {}).get("display_name")
+    ]
+    location = work.get("primary_location") or {}
+    source = location.get("source") or {}
+
+    # OpenAlex returns the DOI as a full URL; BibTeX wants the bare identifier.
+    doi = (work.get("doi") or "").replace("https://doi.org/", "")
+    year = str(work.get("publication_year") or "")
+    title = work.get("display_name") or work.get("title") or ""
+
+    record = {
+        "title": title,
+        "authors": authors,
+        "year": year,
+        "doi": doi,
+        "venue": source.get("display_name") or "",
+        "cited_by": work.get("cited_by_count") or 0,
+        "type": work.get("type") or "article",
+        "is_retracted": bool(work.get("is_retracted")),
+        "openalex": work.get("id") or "",
+    }
+    record["key"] = _suggest_key(authors, year, title)
+    record["bibtex"] = to_bibtex(record)
+    return record
+
+
+def _suggest_key(authors: list[str], year: str, title: str) -> str:
+    """Build a conventional ``surnameYEAR`` citation key."""
+    import re
+    import unicodedata
+
+    surname = ""
+    if authors:
+        parts = authors[0].split()
+        surname = parts[-1] if parts else ""
+    if not surname:
+        surname = (title.split() or ["work"])[0]
+
+    folded = unicodedata.normalize("NFKD", surname)
+    ascii_only = "".join(c for c in folded if not unicodedata.combining(c))
+    stem = re.sub(r"[^a-z]", "", ascii_only.lower()) or "work"
+    return f"{stem}{year}" if year else stem
+
+
+#: OpenAlex work types that map onto a BibTeX entry type other than @article.
+_BIBTEX_TYPE = {
+    "book": "book",
+    "book-chapter": "incollection",
+    "dissertation": "phdthesis",
+    "proceedings-article": "inproceedings",
+    "report": "techreport",
+}
+
+
+def to_bibtex(record: dict[str, Any]) -> str:
+    """Render a search record as a BibTeX entry.
+
+    Titles are wrapped in an extra brace group because BibTeX styles lowercase titles by
+    default, and a paper about ``BERT`` must not be typeset as ``Bert``.
+    """
+    entry_type = _BIBTEX_TYPE.get(record.get("type", ""), "article")
+    fields: list[tuple[str, str]] = []
+
+    authors = record.get("authors") or []
+    if authors:
+        fields.append(("author", " and ".join(authors)))
+    if record.get("title"):
+        fields.append(("title", "{" + record["title"] + "}"))
+    if record.get("venue"):
+        key = "booktitle" if entry_type == "inproceedings" else "journal"
+        fields.append((key, record["venue"]))
+    if record.get("year"):
+        fields.append(("year", record["year"]))
+    if record.get("doi"):
+        fields.append(("doi", record["doi"]))
+
+    width = max((len(name) for name, _ in fields), default=0)
+    body = ",\n".join(f"  {name.ljust(width)} = {{{value}}}" for name, value in fields)
+    return f"@{entry_type}{{{record.get('key', 'work')},\n{body}\n}}"
+
+
 _default: Verifier | None = None
+_default_searcher: Searcher | None = None
+
+
+def get_default_searcher() -> Searcher:
+    """Process-wide default search backend."""
+    global _default_searcher
+    if _default_searcher is None:
+        _default_searcher = OpenAlexSearcher()
+    return _default_searcher
+
+
+def set_default_searcher(searcher: Searcher | None) -> None:
+    """Override the default. Passing ``None`` restores the OpenAlex backend."""
+    global _default_searcher
+    _default_searcher = searcher
 
 
 def get_default_verifier() -> Verifier:

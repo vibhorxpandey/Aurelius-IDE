@@ -1,103 +1,138 @@
 import * as vscode from "vscode";
-import {
-  LanguageClient,
-  LanguageClientOptions,
-  ServerOptions,
-  TransportKind,
-} from "vscode-languageclient/node";
+import { AureliusClient, activeTexUri } from "./client";
+import { BibliographyProvider } from "./bibliographyView";
+import { GateProvider } from "./gateView";
+import { findAndCite } from "./literatureSearch";
 
-let client: LanguageClient | undefined;
-
-/**
- * Resolve how to launch the server.
- *
- * Two supported shapes: the `aurelius-lsp` console script on PATH (the normal case
- * after `pip install aurelius-ide[all]`), or an explicit interpreter running the module,
- * which is what you want inside a virtualenv or a conda environment.
- */
-function buildServerOptions(): ServerOptions {
-  const config = vscode.workspace.getConfiguration("aurelius");
-  const pythonPath = config.get<string>("pythonPath", "").trim();
-
-  if (pythonPath) {
-    return {
-      command: pythonPath,
-      args: ["-m", "aurelius_ide.lsp"],
-      transport: TransportKind.stdio,
-    };
-  }
-  return {
-    command: config.get<string>("serverPath", "aurelius-lsp"),
-    args: [],
-    transport: TransportKind.stdio,
-  };
-}
-
-function buildClientOptions(): LanguageClientOptions {
-  return {
-    documentSelector: [
-      { scheme: "file", language: "latex" },
-      { scheme: "file", language: "tex" },
-      { scheme: "file", language: "bibtex" },
-    ],
-    synchronize: {
-      // A .bib edit changes diagnostics in every .tex that cites it, so the server
-      // needs to see those changes even when the .bib isn't the active editor.
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.{tex,bib}"),
-      configurationSection: "aurelius",
-    },
-    outputChannel: vscode.window.createOutputChannel("Aurelius"),
-  };
-}
-
-async function start(context: vscode.ExtensionContext): Promise<void> {
-  client = new LanguageClient(
-    "aurelius",
-    "Aurelius Research Linter",
-    buildServerOptions(),
-    buildClientOptions()
-  );
-
-  try {
-    await client.start();
-    context.subscriptions.push(client);
-  } catch (error) {
-    // The overwhelmingly common failure is that the Python package isn't installed.
-    // Say that plainly instead of surfacing a raw spawn ENOENT.
-    void vscode.window.showErrorMessage(
-      `Aurelius could not start its language server. Install it with ` +
-        `\`pip install "aurelius-ide[all]"\`, or set aurelius.pythonPath to the ` +
-        `interpreter where it lives. (${error})`
-    );
-  }
-}
+let client: AureliusClient | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  await start(context);
+  client = new AureliusClient(context);
+  await client.start();
+
+  const bibliography = new BibliographyProvider(client);
+  const gate = new GateProvider(client);
+
+  const bibView = vscode.window.createTreeView("aurelius.bibliography", {
+    treeDataProvider: bibliography,
+    showCollapseAll: false,
+  });
+  const gateView = vscode.window.createTreeView("aurelius.gate", { treeDataProvider: gate });
+  context.subscriptions.push(bibView, gateView);
+
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  status.command = "aurelius.showBibliography";
+  context.subscriptions.push(status);
+
+  const refresh = async () => {
+    bibliography.refresh();
+    // The tree title carries the count, so it is legible without expanding the view.
+    const summary = await pollDescription(bibliography);
+    bibView.description = summary;
+    updateStatus(status, summary);
+  };
+
+  context.subscriptions.push(
+    client.onDidChange(() => void refresh()),
+    vscode.window.onDidChangeActiveTextEditor(() => void refresh()),
+    // Re-verification is debounced server-side; this only re-reads what it published.
+    vscode.workspace.onDidSaveTextDocument(() => void refresh()),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document.uri.toString() === activeTexUri()) {
+        void refresh();
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("aurelius.restart", async () => {
-      await client?.stop();
-      client = undefined;
-      await start(context);
+      await client?.restart();
+      gate.reset();
       void vscode.window.showInformationMessage("Aurelius restarted.");
-    })
-  );
+    }),
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand("aurelius.verifyAll", async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
+    vscode.commands.registerCommand("aurelius.refreshBibliography", () => void refresh()),
+
+    vscode.commands.registerCommand("aurelius.showBibliography", () =>
+      vscode.commands.executeCommand("aurelius.bibliography.focus")
+    ),
+
+    vscode.commands.registerCommand("aurelius.findAndCite", async () => {
+      if (client) {
+        await findAndCite(client);
+        void refresh();
+      }
+    }),
+
+    vscode.commands.registerCommand("aurelius.runSubmissionGate", async () => {
+      await gate.run();
+      await vscode.commands.executeCommand("aurelius.gate.focus");
+    }),
+
+    vscode.commands.registerCommand("aurelius.compileGate", async () => {
+      const uri = activeTexUri();
+      if (!uri || !client) {
+        void vscode.window.showWarningMessage("Open a .tex file to run the compile gate.");
         return;
       }
-      // Re-open forces a full pass rather than an incremental one, which is what
-      // "verify everything now" should mean.
-      await client?.sendNotification("textDocument/didSave", {
-        textDocument: { uri: editor.document.uri.toString() },
-      });
-      void vscode.window.showInformationMessage("Aurelius: verifying bibliography…");
-    })
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Window, title: "Aurelius: compiling…" },
+        () => client!.compileGate(uri)
+      );
+      if (result && !result.ok) {
+        // "No toolchain" is not "your paper is broken" — say which one it was.
+        void vscode.window.showWarningMessage(`Aurelius: ${result.reason}`);
+      }
+      void refresh();
+    }),
+
+    vscode.commands.registerCommand("aurelius.verifyAll", async () => {
+      const uri = activeTexUri();
+      if (uri) {
+        await vscode.commands.executeCommand("workbench.action.files.save");
+        void refresh();
+      }
+    }),
+
+    vscode.commands.registerCommand(
+      "aurelius.revealEntry",
+      async (bibUri: string, line: number) => {
+        if (!bibUri) {
+          return;
+        }
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(bibUri));
+        const editor = await vscode.window.showTextDocument(doc, { preview: true });
+        const position = new vscode.Position(Math.max(0, line), 0);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+          new vscode.Range(position, position),
+          vscode.TextEditorRevealType.InCenter
+        );
+      }
+    )
   );
+
+  void refresh();
+}
+
+/** Read the provider's summary after its children have been produced. */
+async function pollDescription(provider: BibliographyProvider): Promise<string> {
+  await provider.getChildren();
+  return provider.description;
+}
+
+function updateStatus(item: vscode.StatusBarItem, summary: string): void {
+  if (!summary || !activeTexUri()) {
+    item.hide();
+    return;
+  }
+  const problems = /(\d+) problem/.exec(summary);
+  item.text = problems ? `$(book) ${summary}` : `$(book) ${summary}`;
+  item.backgroundColor = problems
+    ? new vscode.ThemeColor("statusBarItem.warningBackground")
+    : undefined;
+  item.tooltip = "Aurelius: show bibliography";
+  item.show();
 }
 
 export function deactivate(): Thenable<void> | undefined {

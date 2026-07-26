@@ -40,7 +40,8 @@ Tests must stay hermetic and fast. Nothing in `tests/` may touch the network —
 document.py      LaTeX + BibTeX → structured spans. Pure parsing, no I/O.
 diagnostics.py   Diagnostic/Severity/Code. Mirrors LSP shape without importing pygls.
 cache.py         Content-addressed TTL cache, memory + disk.
-verification.py  Verifier protocol + backends. The ONLY module that knows about the network.
+verification.py  Verifier + Searcher protocols and backends. The ONLY module that touches
+                 the network — both directions, so "what does this talk to?" has one answer.
 compiling.py     The compile gate. Runs pdflatex/bibtex; parses logs into diagnostics.
 engine.py        Scheduling: two-phase analysis, debouncing, version guarding.
 analyzers/       Pure functions: document → [Diagnostic].
@@ -48,7 +49,8 @@ analyzers/       Pure functions: document → [Diagnostic].
   claims.py        AUR006: empirical assertions with no source.
   syntax.py        AUR008: an unescaped % that eats the rest of the line.
   binding.py       AUR009: prose that names a source the cited entry contradicts.
-lsp.py           pygls transport. Contains no analysis logic.
+lsp.py           pygls transport + the panel commands. Contains no analysis logic.
+editors/vscode/  The extension. Thin client; see "The editor surface" below.
 ```
 
 Dependency direction is strictly downward. `analyzers/` imports from `document`,
@@ -134,10 +136,22 @@ Standard library first. Type hints on public functions. Docstrings explain *why*
 choice was made, not what the code does — the non-obvious reasoning is the part worth
 writing down. Comments on the counterintuitive parts only.
 
-## Not built yet
+## The editor surface
 
-- VS Code extension is scaffolded in `editors/vscode/` but not published. It does not yet
-  surface the `aurelius.compileGate` command.
+`editors/vscode/` is a working extension (v0.2.0), packaged but **not published** to the
+Marketplace or Open VSX. It contributes a bibliography panel, a submission-gate panel, and
+literature search bound to <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd>.
+
+The client is thin on purpose. `client.ts` is the only module that talks to the server,
+and panels ask for **structured state** via four `@server.command` handlers in `lsp.py` —
+`bibliographyStatus`, `searchLiterature`, `submissionGate`, `compileGate`. They do not
+re-derive state by parsing diagnostic messages, which would mean a second copy of the
+parser in TypeScript that drifts the first time a message is reworded.
+
+Those command name constants are a cross-language contract. Renaming one means editing
+`lsp.py` and `client.ts` together; nothing catches a mismatch at compile time.
+
+## Not built yet
 - Claim-to-source binding is *partial*. `AUR009` catches prose that contradicts the entry
   it cites — the wrong-key case. It cannot tell whether a work genuinely supports the
   assertion, so a sentence citing a real, correctly-named, topically unrelated paper still

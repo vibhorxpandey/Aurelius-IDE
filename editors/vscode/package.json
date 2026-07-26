@@ -1,25 +1,134 @@
 {
   "name": "aurelius-ide",
   "displayName": "Aurelius — Research Paper Linter",
-  "description": "Live citation verification and claim analysis for LaTeX papers.",
-  "version": "0.1.0",
+  "description": "Live citation verification, retraction checking, and a submission gate for LaTeX papers.",
+  "version": "0.2.0",
   "publisher": "vibhorxpandey",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/vibhorxpandey/aurelius-ide" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vibhorxpandey/Aurelius-IDE"
+  },
+  "bugs": {
+    "url": "https://github.com/vibhorxpandey/Aurelius-IDE/issues"
+  },
   "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Programming Languages"],
-  "keywords": ["latex", "bibtex", "citations", "research", "academic"],
+  "categories": ["Linters", "Programming Languages", "Education"],
+  "keywords": ["latex", "bibtex", "citations", "research", "academic", "retraction"],
   "activationEvents": ["onLanguage:latex", "onLanguage:tex", "onLanguage:bibtex"],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aurelius",
+          "title": "Aurelius",
+          "icon": "media/aurelius.svg"
+        }
+      ]
+    },
+    "views": {
+      "aurelius": [
+        {
+          "id": "aurelius.bibliography",
+          "name": "Bibliography",
+          "icon": "media/aurelius.svg",
+          "contextualTitle": "Aurelius Bibliography"
+        },
+        {
+          "id": "aurelius.gate",
+          "name": "Submission gate",
+          "icon": "media/aurelius.svg",
+          "contextualTitle": "Aurelius Submission Gate"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "aurelius.bibliography",
+        "contents": "Open a LaTeX paper with a sibling .bib file to see every reference and its verification status.\n\n[Find a paper to cite](command:aurelius.findAndCite)"
+      }
+    ],
     "commands": [
       {
         "command": "aurelius.restart",
-        "title": "Aurelius: Restart Language Server"
+        "title": "Restart Language Server",
+        "category": "Aurelius"
       },
       {
         "command": "aurelius.verifyAll",
-        "title": "Aurelius: Verify Entire Bibliography"
+        "title": "Verify Entire Bibliography",
+        "category": "Aurelius",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "aurelius.refreshBibliography",
+        "title": "Refresh Bibliography",
+        "category": "Aurelius",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "aurelius.findAndCite",
+        "title": "Find a Paper and Cite It",
+        "category": "Aurelius",
+        "icon": "$(search)"
+      },
+      {
+        "command": "aurelius.runSubmissionGate",
+        "title": "Run Submission Gate",
+        "category": "Aurelius",
+        "icon": "$(play)"
+      },
+      {
+        "command": "aurelius.compileGate",
+        "title": "Compile and Report Errors",
+        "category": "Aurelius",
+        "icon": "$(file-pdf)"
+      },
+      {
+        "command": "aurelius.showBibliography",
+        "title": "Show Bibliography Panel",
+        "category": "Aurelius"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "aurelius.refreshBibliography",
+          "when": "view == aurelius.bibliography",
+          "group": "navigation"
+        },
+        {
+          "command": "aurelius.findAndCite",
+          "when": "view == aurelius.bibliography",
+          "group": "navigation"
+        },
+        {
+          "command": "aurelius.runSubmissionGate",
+          "when": "view == aurelius.gate",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "aurelius.runSubmissionGate",
+          "when": "resourceLangId == latex || resourceLangId == tex",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aurelius.showBibliography",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "aurelius.findAndCite",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "editorTextFocus && (editorLangId == latex || editorLangId == tex)"
       }
     ],
     "configuration": {
@@ -56,7 +165,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
   },
   "dependencies": { "vscode-languageclient": "^9.0.1" },
   "devDependencies": {

@@ -27,6 +27,7 @@ from pygls.lsp.server import LanguageServer
 from .compiling import default_gate
 from .diagnostics import Code, Diagnostic
 from .engine import AnalysisEngine
+from .verification import get_default_searcher
 
 SERVER_NAME = "aurelius-ide"
 SERVER_VERSION = "0.1.0"
@@ -404,6 +405,201 @@ def compile_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
     instant = ls.engine.diagnostics(uri)
     ls.publish_split(uri, instant + diags, 0)
     return {"ok": True, "diagnostics": len(diags)}
+
+
+# --------------------------------------------------------------------------------------
+# Panel commands — structured state for the editor UI
+# --------------------------------------------------------------------------------------
+#
+# The panels need the *bibliography as a list of works with verdicts*, which is a
+# different shape from a flat diagnostic stream. Rather than have the extension re-derive
+# it by parsing diagnostic messages — brittle, and it would duplicate the parser in
+# TypeScript — the server answers a question it can already answer cheaply from the
+# document and the verification cache.
+
+BIBLIOGRAPHY_COMMAND = "aurelius.bibliographyStatus"
+SEARCH_COMMAND = "aurelius.searchLiterature"
+SUBMISSION_GATE_COMMAND = "aurelius.submissionGate"
+
+#: Cached-verdict lookup never triggers I/O. A panel refresh must not cost a round trip.
+_VERDICT_ICON = {
+    "verified": "verified",
+    "retracted": "retracted",
+    "not_found": "not_found",
+    "unverified": "unverified",
+}
+
+
+@server.command(BIBLIOGRAPHY_COMMAND)
+def bibliography_status(ls: AureliusLanguageServer, args) -> dict[str, object]:
+    """Every bibliography entry, with its cached verdict and where it is cited.
+
+    Reads only what the engine already holds. An entry whose verification has not landed
+    yet reports ``unchecked`` rather than a guess — the same rule as invariant 4, applied
+    to a panel instead of a squiggle.
+    """
+    uri = args[0] if args else None
+    document = ls.engine.document(uri) if uri else None
+    if document is None:
+        return {"ok": False, "reason": "No analysed document for that URI.", "entries": []}
+
+    cited: dict[str, list[int]] = {}
+    for ref in document.cite_refs:
+        cited.setdefault(ref.key, []).append(document.range_of(ref.start, ref.end).start.line)
+
+    entries = []
+    for key, entry in sorted(document.bib_entries.items()):
+        verdict = _cached_verdict(ls, entry) or {}
+        entries.append(
+            {
+                "key": key,
+                "title": entry.title,
+                "author": entry.author,
+                "year": entry.year,
+                "doi": entry.doi,
+                "venue": entry.fields.get("journal") or entry.fields.get("booktitle") or "",
+                "entryType": entry.entry_type,
+                "citedOnLines": sorted(cited.get(key, [])),
+                "citeCount": len(cited.get(key, [])),
+                "verdict": _VERDICT_ICON.get(str(verdict.get("verdict")), "unchecked"),
+                "confidence": verdict.get("confidence") or "",
+                "notes": verdict.get("notes") or "",
+                "bibLine": document.bib_range_of(entry.start, entry.end).start.line,
+            }
+        )
+
+    return {
+        "ok": True,
+        "entries": entries,
+        "bibUri": document.bib_uri or "",
+        "counts": _tally(entries),
+    }
+
+
+def _tally(entries: list[dict[str, object]]) -> dict[str, int]:
+    counts = {"total": len(entries), "retracted": 0, "not_found": 0, "unverified": 0,
+              "verified": 0, "unchecked": 0, "uncited": 0}
+    for e in entries:
+        counts[str(e["verdict"])] = counts.get(str(e["verdict"]), 0) + 1
+        if not e["citeCount"]:
+            counts["uncited"] += 1
+    return counts
+
+
+@server.command(SEARCH_COMMAND)
+def search_literature(ls: AureliusLanguageServer, args) -> dict[str, object]:
+    """Search scholarly indexes and return insertable BibTeX for each hit.
+
+    Failure returns ``ok: False`` with a reason rather than an empty result list, so the
+    editor can say "search is unreachable" instead of the far more alarming "no such
+    paper exists" — the same distinction the verifier draws.
+    """
+    query = args[0] if args else ""
+    limit = int(args[1]) if len(args) > 1 else 8
+    if not str(query).strip():
+        return {"ok": True, "results": []}
+
+    try:
+        results = get_default_searcher().search(str(query), limit=limit)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "reason": f"Could not reach the literature index ({type(exc).__name__}).",
+            "results": [],
+        }
+    return {"ok": True, "results": results}
+
+
+@server.command(SUBMISSION_GATE_COMMAND)
+def submission_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
+    """Everything that must hold before a paper is submitted, as a pass/fail checklist.
+
+    Combines the live analysis with a real compile. Each check reports ``pass``, ``fail``
+    or ``skip`` — never a silent success — because a gate that cannot run a check must say
+    so rather than let it read as satisfied.
+    """
+    uri = args[0] if args else None
+    if not uri:
+        return {"ok": False, "reason": "No document URI supplied."}
+
+    document = ls.engine.document(uri)
+    diagnostics = ls.engine.diagnostics(uri)
+    by_code: dict[str, int] = {}
+    for d in diagnostics:
+        by_code[d.code] = by_code.get(d.code, 0) + 1
+
+    checks: list[dict[str, object]] = [
+        _check(
+            "No unresolved citation keys",
+            by_code.get(Code.UNDEFINED_CITATION, 0),
+            blocking=True,
+        ),
+        _check("No retracted citations", by_code.get(Code.RETRACTED_CITATION, 0), blocking=True),
+        _check(
+            "Every reference resolves to a real work",
+            by_code.get(Code.UNVERIFIED_CITATION, 0),
+            blocking=True,
+        ),
+        _check("Prose matches the works it cites", by_code.get(Code.CITATION_BINDING, 0)),
+        _check("Bibliography entries are complete", by_code.get(Code.INCOMPLETE_BIB_ENTRY, 0)),
+        _check("Empirical claims carry a source", by_code.get(Code.UNCITED_CLAIM, 0)),
+        _check("No unescaped percent signs", by_code.get(Code.UNESCAPED_PERCENT, 0)),
+    ]
+
+    gate = default_gate()
+    path = _uri_to_path(uri)
+    if not gate.available() or path is None:
+        checks.append(
+            {
+                "label": "The paper compiles",
+                "status": "skip",
+                "count": 0,
+                "blocking": True,
+                "detail": "No LaTeX toolchain found — this check did not run.",
+            }
+        )
+    else:
+        source = None
+        try:
+            source = ls.workspace.get_text_document(uri).source
+        except KeyError:
+            pass
+        bib_uri = ls.bib_for.get(uri)
+        compile_diags = gate.check(
+            path, bib_path=_uri_to_path(bib_uri) if bib_uri else None, source=source
+        )
+        errors = [d for d in compile_diags if d.code == Code.COMPILE_ERROR]
+        checks.append(_check("The paper compiles", len(errors), blocking=True))
+        checks.append(
+            _check(
+                "No undefined cross-references",
+                len([d for d in compile_diags if d.code == Code.COMPILE_WARNING]),
+            )
+        )
+        ls.publish_split(uri, diagnostics + compile_diags, 0)
+
+    blocking = [c for c in checks if c["blocking"] and c["status"] == "fail"]
+    skipped = [c for c in checks if c["status"] == "skip"]
+    return {
+        "ok": True,
+        "checks": checks,
+        "blocking": len(blocking),
+        "skipped": len(skipped),
+        # "ready" requires every blocking check to have actually run and passed. A skipped
+        # check is not a passed one, so it withholds the verdict rather than granting it.
+        "ready": not blocking and not skipped,
+        "references": len(document.bib_entries) if document else 0,
+    }
+
+
+def _check(label: str, count: int, blocking: bool = False) -> dict[str, object]:
+    return {
+        "label": label,
+        "status": "pass" if count == 0 else "fail",
+        "count": count,
+        "blocking": blocking,
+        "detail": "",
+    }
 
 
 def _append_at(line: int) -> lsp.Range:

@@ -21,11 +21,17 @@ from .document import BibEntry, CiteKeyRef, Position, Range, ResearchDocument
 from .engine import AnalysisEngine
 from .verification import (
     AureliusVerifier,
+    NullSearcher,
     NullVerifier,
+    OpenAlexSearcher,
+    Searcher,
     VerdictKind,
     Verifier,
+    get_default_searcher,
     get_default_verifier,
+    set_default_searcher,
     set_default_verifier,
+    to_bibtex,
 )
 
 __version__ = "0.1.0"
@@ -53,4 +59,10 @@ __all__ = [
     "SubprocessRunner",
     "DockerRunner",
     "default_gate",
+    "Searcher",
+    "OpenAlexSearcher",
+    "NullSearcher",
+    "get_default_searcher",
+    "set_default_searcher",
+    "to_bibtex",
 ]

@@ -51,8 +51,14 @@ isn't — see [invariant 1](CLAUDE.md) and `verification.py`.
 
 ## Use
 
-**In an editor.** Point your LSP client at `aurelius-lsp` (stdio) for `latex` and `bibtex`
-files. A VS Code extension is scaffolded in `editors/vscode/`.
+**In VS Code.** The extension in [`editors/vscode/`](editors/vscode/) adds a bibliography
+panel with live verdicts, a submission gate, and literature search on
+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> — search OpenAlex, insert `\cite{key}`, and
+append the entry to your `.bib` in one step. Not on the Marketplace yet; build a `.vsix`
+with `npm run package`.
+
+**In any other editor.** Point your LSP client at `aurelius-lsp` (stdio) for `latex` and
+`bibtex` files. Diagnostics, hover-to-resolve, and quick fixes work over plain LSP.
 
 **In CI, or a pre-submission gate:**
 

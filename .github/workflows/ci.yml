@@ -7,10 +7,14 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The engine parses paths, resolves cache directories, and shells out to a TeX
+    # toolchain — all three behave differently per OS, and none of it was exercised
+    # outside Linux before this matrix existed.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +22,70 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev,lsp]"
-      - run: ruff check src tests
-      # The suite is hermetic: no network, no scholarly backend installed. This job
-      # therefore also proves the engine works with verification unavailable.
+
+      # The suite is hermetic: no network, no TeX, no scholarly backend installed. This job
+      # therefore also proves the engine works with verification unavailable, which is the
+      # degraded mode most users meet first.
       - run: pytest
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest'
+        run: ruff check src tests scripts
+
+      - name: Version single source of truth
+        if: matrix.os == 'ubuntu-latest'
+        run: python scripts/sync_version.py --check
+
+  bundle-stays-pure:
+    # The desktop app will ship an embedded Python runtime, which is only cheap while every
+    # bundled dependency is pure Python — one set of files for every OS and architecture.
+    # This guards the `lsp` extra, which is what goes inside the bundle. It deliberately
+    # does NOT guard `verify`: aurelius-mcp pulls pydantic-core, cryptography and cffi, all
+    # compiled, so it stays a user-installed extra rather than a bundled one.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Native wheels are per-platform, so this has to run per-platform to be meaningful.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[lsp]"
+      - run: python scripts/check_pure_python.py --extra lsp
+
+  extension:
+    # The extension is 836 lines of TypeScript that nothing was type-checking in CI.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci || npm install
+      - name: Type-check and compile
+        run: npx tsc --noEmit -p ./
+      - name: Package the extension
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: editors/vscode/*.vsix
+
+  command-contract:
+    # The four LSP command names are shared between lsp.py and client.ts by hand. Nothing
+    # catches a mismatch at compile time, and a renamed command fails silently at runtime
+    # as a panel that never populates.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Server and client agree on command names
+        run: python scripts/check_command_contract.py

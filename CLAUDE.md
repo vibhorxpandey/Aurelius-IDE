@@ -22,11 +22,25 @@ The mental model throughout is a code IDE:
 
 ```bash
 pip install -e ".[dev,lsp]"       # editable install with test + LSP deps
-pytest                            # full suite (~1s, no network)
+pytest                            # full suite (~1.5s, no network)
 pytest tests/test_engine.py -q    # one module
-ruff check src tests              # lint
+ruff check src tests scripts      # lint
 aurelius-lsp                      # run the language server on stdio
 ```
+
+Four gates run in CI. Run them before pushing — each one exists because the thing it checks
+already broke silently once:
+
+```bash
+python scripts/sync_version.py --check        # one version, four derived files
+python scripts/check_command_contract.py      # lsp.py and client.ts agree on command names
+python scripts/check_pure_python.py           # the bundled extra stays pure Python
+python scripts/sync_version.py                # regenerate release-manifest.json
+```
+
+**The version lives in exactly one place**: `__version__` in `src/aurelius_ide/__init__.py`.
+`pyproject.toml` reads it via hatchling, `lsp.py` imports it, and `sync_version.py` pushes it
+into the extension manifest and `release-manifest.json`. Never edit a version anywhere else.
 
 The suite needs no network *and no TeX installation* — `tests/test_compiling.py` replays
 captured `pdflatex` logs through a stub runner.
@@ -35,6 +49,9 @@ Tests must stay hermetic and fast. Nothing in `tests/` may touch the network —
 `StubVerifier` from `tests/conftest.py`.
 
 ## Architecture
+
+[ARCHITECTURE.md](ARCHITECTURE.md) is the full treatment — layers, the two-phase model, the
+network boundary, the diagnostic catalogue, and what is *not* built. This is the summary.
 
 ```
 document.py      LaTeX + BibTeX → structured spans. Pure parsing, no I/O.
@@ -152,10 +169,17 @@ Those command name constants are a cross-language contract. Renaming one means e
 `lsp.py` and `client.ts` together; nothing catches a mismatch at compile time.
 
 ## Not built yet
+
+See [ARCHITECTURE.md § Known limitations](ARCHITECTURE.md#10-known-limitations) for the full,
+honest list — no project model, six LSP features, three settings that do nothing, no PDF
+viewer, nothing published. That section is the baseline the roadmap is measured against, so
+keep it accurate.
+
 - Claim-to-source binding is *partial*. `AUR009` catches prose that contradicts the entry
   it cites — the wrong-key case. It cannot tell whether a work genuinely supports the
   assertion, so a sentence citing a real, correctly-named, topically unrelated paper still
   passes. That needs semantics the stdlib parser cannot supply.
+
 ## House style, settled
 
 Annotations use the **builtin** spelling — `list[str]`, `dict[str, X]`, `X | None` — not

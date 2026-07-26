@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aurelius-ide"
-version = "0.1.0"
+# Sourced from src/aurelius_ide/__init__.py — see [tool.hatch.version] below. There is
+# exactly one literal version in this project and it is not here.
+dynamic = ["version"]
 description = "A language server for research papers: live citation verification and claim analysis for LaTeX."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -44,6 +46,9 @@ aurelius-lsp = "aurelius_ide.lsp:main"
 Homepage = "https://github.com/vibhorxpandey/aurelius-ide"
 Repository = "https://github.com/vibhorxpandey/aurelius-ide"
 Issues = "https://github.com/vibhorxpandey/aurelius-ide/issues"
+
+[tool.hatch.version]
+path = "src/aurelius_ide/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aurelius_ide"]

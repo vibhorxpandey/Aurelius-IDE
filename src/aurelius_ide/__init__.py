@@ -34,7 +34,10 @@ from .verification import (
     to_bibtex,
 )
 
-__version__ = "0.1.0"
+#: The canonical version for the whole project. `pyproject.toml` reads this via hatchling,
+#: `lsp.py` imports it, and `scripts/sync_version.py` propagates it to the extension
+#: manifest and the release manifest. Change it here and nowhere else.
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",

@@ -1,0 +1,25 @@
+{
+  "version": "0.3.0",
+  "tests": 175,
+  "indexes": [
+    "OpenAlex",
+    "Crossref",
+    "arXiv",
+    "Semantic Scholar"
+  ],
+  "diagnosticCodes": [
+    "AUR001",
+    "AUR002",
+    "AUR003",
+    "AUR004",
+    "AUR005",
+    "AUR006",
+    "AUR007",
+    "AUR008",
+    "AUR009",
+    "AUR010",
+    "AUR011"
+  ],
+  "repository": "https://github.com/vibhorxpandey/Aurelius-IDE",
+  "license": "MIT"
+}

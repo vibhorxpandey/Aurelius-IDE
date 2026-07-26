@@ -24,13 +24,16 @@ from urllib.parse import unquote, urlparse
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
+from . import __version__
 from .compiling import default_gate
 from .diagnostics import Code, Diagnostic
 from .engine import AnalysisEngine
 from .verification import get_default_searcher
 
 SERVER_NAME = "aurelius-ide"
-SERVER_VERSION = "0.1.0"
+#: Never hardcode this. The client reports it in bug reports, and a version that disagrees
+#: with the installed package sends you debugging the wrong build.
+SERVER_VERSION = __version__
 
 _BIB_DECL_RE = re.compile(r"\\(?:bibliography|addbibresource)\s*\{([^}]*)\}")
 

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 from lsprotocol import types as lsp
@@ -35,7 +34,7 @@ SERVER_VERSION = "0.1.0"
 _BIB_DECL_RE = re.compile(r"\\(?:bibliography|addbibresource)\s*\{([^}]*)\}")
 
 
-def _uri_to_path(uri: str) -> Optional[Path]:
+def _uri_to_path(uri: str) -> Path | None:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         return None
@@ -64,7 +63,7 @@ def _to_lsp_diagnostic(d: Diagnostic) -> lsp.Diagnostic:
 _BIB_CODES = frozenset({Code.UNUSED_BIB_ENTRY, Code.INCOMPLETE_BIB_ENTRY})
 
 
-def _partition(diags: List[Diagnostic]) -> Tuple[List[Diagnostic], List[Diagnostic]]:
+def _partition(diags: list[Diagnostic]) -> tuple[list[Diagnostic], list[Diagnostic]]:
     """Split diagnostics into (tex-anchored, bib-anchored)."""
     tex = [d for d in diags if d.code not in _BIB_CODES]
     bib = [d for d in diags if d.code in _BIB_CODES]
@@ -78,17 +77,17 @@ class AureliusLanguageServer(LanguageServer):
         super().__init__(name=SERVER_NAME, version=SERVER_VERSION)
         self.engine = AnalysisEngine(publish=self._publish_from_engine)
         #: tex uri -> bib uri, so a .bib edit can re-run its dependents.
-        self.bib_for: Dict[str, str] = {}
+        self.bib_for: dict[str, str] = {}
 
     # -- bibliography resolution ---------------------------------------------------------
 
-    def resolve_bib(self, tex_uri: str, tex_source: str) -> Tuple[str, Optional[str]]:
+    def resolve_bib(self, tex_uri: str, tex_source: str) -> tuple[str, str | None]:
         """Find and read the bibliography referenced by a ``.tex`` document."""
         tex_path = _uri_to_path(tex_uri)
         if tex_path is None:
             return "", None
         match = _BIB_DECL_RE.search(tex_source)
-        candidates: List[Path] = []
+        candidates: list[Path] = []
         if match:
             for name in match.group(1).split(","):
                 name = name.strip()
@@ -108,11 +107,11 @@ class AureliusLanguageServer(LanguageServer):
 
     # -- publication ----------------------------------------------------------------------
 
-    def _publish_from_engine(self, uri: str, diags: List[Diagnostic], version: int) -> None:
+    def _publish_from_engine(self, uri: str, diags: list[Diagnostic], version: int) -> None:
         """Callback invoked from the engine's background thread."""
         self.publish_split(uri, diags, version)
 
-    def publish_split(self, tex_uri: str, diags: List[Diagnostic], version: int) -> None:
+    def publish_split(self, tex_uri: str, diags: list[Diagnostic], version: int) -> None:
         tex_diags, bib_diags = _partition(diags)
         self.text_document_publish_diagnostics(
             lsp.PublishDiagnosticsParams(
@@ -194,7 +193,7 @@ def _reanalyze_dependents(ls: AureliusLanguageServer, bib_uri: str) -> None:
 
 
 @server.feature(lsp.TEXT_DOCUMENT_HOVER)
-def hover(ls: AureliusLanguageServer, params: lsp.HoverParams) -> Optional[lsp.Hover]:
+def hover(ls: AureliusLanguageServer, params: lsp.HoverParams) -> lsp.Hover | None:
     """Show what a citation key actually resolves to, without leaving the editor."""
     uri = params.text_document.uri
     document = ls.engine.document(uri)
@@ -235,7 +234,7 @@ def hover(ls: AureliusLanguageServer, params: lsp.HoverParams) -> Optional[lsp.H
     return _markdown_hover("\n".join(lines))
 
 
-def _cached_verdict(ls: AureliusLanguageServer, entry) -> Optional[dict]:
+def _cached_verdict(ls: AureliusLanguageServer, entry) -> dict | None:
     for analyzer in ls.engine.analyzers:
         if getattr(analyzer, "name", "") == "scholarly_verification":
             return analyzer.cache.get(analyzer.name, entry.content_hash())
@@ -259,9 +258,9 @@ def _markdown_hover(markdown: str) -> lsp.Hover:
 )
 def code_action(
     ls: AureliusLanguageServer, params: lsp.CodeActionParams
-) -> List[lsp.CodeAction]:
+) -> list[lsp.CodeAction]:
     """Offer fixes: correct a mistyped key, or insert the verified BibTeX for a bad one."""
-    actions: List[lsp.CodeAction] = []
+    actions: list[lsp.CodeAction] = []
     uri = params.text_document.uri
 
     for diag in params.context.diagnostics:
@@ -340,7 +339,7 @@ def _retarget_key_edit(
     diag: lsp.Diagnostic,
     old_key: str,
     new_key: str,
-) -> Optional[lsp.TextEdit]:
+) -> lsp.TextEdit | None:
     """Build an edit replacing ``old_key`` inside the diagnostic's range."""
     document = ls.engine.document(uri)
     if document is None:
@@ -359,7 +358,7 @@ def _retarget_key_edit(
     )
 
 
-def _line_char(text: str, offset: int) -> Tuple[int, int]:
+def _line_char(text: str, offset: int) -> tuple[int, int]:
     line = text.count("\n", 0, offset)
     line_start = text.rfind("\n", 0, offset) + 1
     return line, offset - line_start
@@ -373,7 +372,7 @@ COMPILE_GATE_COMMAND = "aurelius.compileGate"
 
 
 @server.command(COMPILE_GATE_COMMAND)
-def compile_gate(ls: AureliusLanguageServer, args) -> Dict[str, object]:
+def compile_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
     """Run ``pdflatex``/``bibtex`` over a paper and publish what the toolchain said.
 
     Exposed as a command rather than an analyzer because a compile costs seconds and

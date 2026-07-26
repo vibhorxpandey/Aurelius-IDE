@@ -144,8 +144,13 @@ writing down. Comments on the counterintuitive parts only.
   passes. That needs semantics the stdlib parser cannot supply.
 ## House style, settled
 
-`UP006`/`UP007`/`UP035` are in `[tool.ruff.lint] ignore`. The codebase uses the `typing`
-spelling (`List[str]`, `Optional[X]`) with `from __future__ import annotations` in every
-module; those rules ask for the builtin spelling. Both are correct on Python 3.10+ — what
-matters is picking one, and the code had already picked. Match the surrounding style
-rather than reintroducing the mix. `ruff check src tests` is green; keep it that way.
+Annotations use the **builtin** spelling — `list[str]`, `dict[str, X]`, `X | None` — not
+`typing.List` / `Optional`. Every module keeps `from __future__ import annotations`. Only
+`Any`, `Protocol`, and `runtime_checkable` still come from `typing`, because they have no
+builtin equivalent. There is no `ignore` list in the ruff config; keep it that way.
+
+**Pin ruff, and run the pinned version.** `dev` pins `ruff>=0.16,<0.17`. Import grouping
+and the `UP` rules move between releases: an older local ruff reported this tree clean
+while CI's newer one found 40 errors in it. `[tool.ruff.lint.isort] known-first-party` is
+set for the same reason — without it, grouping depends on whether `aurelius_ide` happens
+to be installed in the environment doing the checking.

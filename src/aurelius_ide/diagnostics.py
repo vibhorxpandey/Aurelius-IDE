@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .document import Range
 
@@ -53,9 +53,9 @@ class Diagnostic:
     source: str = "aurelius"
     # Free-form payload consumed by code actions (e.g. a corrected citation string, the
     # BibTeX for a matched work). Never rendered directly to the user.
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
 
-    def to_lsp(self) -> Dict[str, Any]:
+    def to_lsp(self) -> dict[str, Any]:
         return {
             "range": {
                 "start": {"line": self.range.start.line, "character": self.range.start.character},
@@ -77,4 +77,4 @@ class AnalysisResult:
     diagnostics: list
     from_cache: bool = False
     duration_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None

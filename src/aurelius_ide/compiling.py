@@ -31,9 +31,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from .diagnostics import Code, Diagnostic, Severity
 from .document import PositionIndex
@@ -54,8 +55,8 @@ class CompileOutcome:
     returncode: int = 0
     #: Set when the toolchain could not be run at all — no binary, timeout, no Docker.
     #: Distinct from a non-zero return code, which means LaTeX ran and rejected the paper.
-    unavailable: Optional[str] = None
-    commands: List[List[str]] = field(default_factory=list)
+    unavailable: str | None = None
+    commands: list[list[str]] = field(default_factory=list)
 
 
 @runtime_checkable
@@ -93,7 +94,7 @@ class SubprocessRunner:
     def available(self) -> bool:
         return shutil.which(self.latex) is not None
 
-    def _command(self, step: str, stem: str, workdir: Path) -> List[str]:
+    def _command(self, step: str, stem: str, workdir: Path) -> list[str]:
         if step == "bibtex":
             return [self.bibtex, stem]
         # -interaction=nonstopmode keeps a syntax error from parking the process on a "?"
@@ -164,7 +165,7 @@ class DockerRunner(SubprocessRunner):
     def available(self) -> bool:
         return shutil.which(self.docker) is not None
 
-    def _command(self, step: str, stem: str, workdir: Path) -> List[str]:
+    def _command(self, step: str, stem: str, workdir: Path) -> list[str]:
         inner = super()._command(step, stem, workdir)
         return [
             self.docker, "run", "--rm",
@@ -257,9 +258,9 @@ class CompileGate:
     def check(
         self,
         tex_path: Path,
-        bib_path: Optional[Path] = None,
-        source: Optional[str] = None,
-    ) -> List[Diagnostic]:
+        bib_path: Path | None = None,
+        source: str | None = None,
+    ) -> list[Diagnostic]:
         """Compile ``tex_path`` and return diagnostics anchored in it.
 
         ``source`` overrides the file's contents, so an editor can gate on the unsaved
@@ -280,7 +281,7 @@ class CompileGate:
     def available(self) -> bool:
         return bool(getattr(self.runner, "available", True))
 
-    def _compile(self, tex_path: Path, bib_path: Optional[Path], text: str) -> CompileOutcome:
+    def _compile(self, tex_path: Path, bib_path: Path | None, text: str) -> CompileOutcome:
         """Build in a scratch directory so the author's folder stays free of artefacts."""
         parent = tempfile.mkdtemp(prefix="aurelius-compile-")
         workdir = Path(parent)
@@ -319,7 +320,7 @@ def _stage_siblings(tex_path: Path, workdir: Path, skip: str) -> None:
                 continue
 
 
-def parse_log(outcome: CompileOutcome, text: str) -> List[Diagnostic]:
+def parse_log(outcome: CompileOutcome, text: str) -> list[Diagnostic]:
     """Turn toolchain logs into diagnostics anchored in the ``.tex``.
 
     Exposed separately from :class:`CompileGate` because it is the part worth testing
@@ -327,10 +328,10 @@ def parse_log(outcome: CompileOutcome, text: str) -> List[Diagnostic]:
     """
     index = PositionIndex(text)
     line_starts = _line_start_offsets(text)
-    out: List[Diagnostic] = []
+    out: list[Diagnostic] = []
     seen: set = set()
 
-    def add(line_no: Optional[int], message: str, severity: Severity, code: str, data: Dict):
+    def add(line_no: int | None, message: str, severity: Severity, code: str, data: dict):
         message = message.strip()
         if not message or _IGNORABLE.search(message):
             return
@@ -406,7 +407,7 @@ def parse_log(outcome: CompileOutcome, text: str) -> List[Diagnostic]:
     return out
 
 
-def _line_start_offsets(text: str) -> List[int]:
+def _line_start_offsets(text: str) -> list[int]:
     starts = [0]
     for i, ch in enumerate(text):
         if ch == "\n":
@@ -414,7 +415,7 @@ def _line_start_offsets(text: str) -> List[int]:
     return starts
 
 
-def _span_for_line(line_starts: List[int], text: str, line_no: Optional[int]):
+def _span_for_line(line_starts: list[int], text: str, line_no: int | None):
     """Offsets covering a 1-indexed log line, or the first line when it is unknown."""
     if not line_no or line_no < 1 or line_no > len(line_starts):
         first_end = text.find("\n")
@@ -424,7 +425,7 @@ def _span_for_line(line_starts: List[int], text: str, line_no: Optional[int]):
     return start, (len(text) if end == -1 else end)
 
 
-def _find_line(text: str, key: str) -> Optional[int]:
+def _find_line(text: str, key: str) -> int | None:
     """1-indexed line of the first ``\\cite``/``\\ref`` mentioning ``key``.
 
     The log reports undefined citations without a line number, so we locate the offending

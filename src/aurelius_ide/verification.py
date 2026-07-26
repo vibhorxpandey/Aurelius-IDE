@@ -21,7 +21,7 @@ exists so transport failure stays silent.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class VerdictKind(str, Enum):
@@ -48,7 +48,7 @@ class Verifier(Protocol):
 
     name: str
 
-    def verify(self, citation: str) -> Dict[str, Any]:
+    def verify(self, citation: str) -> dict[str, Any]:
         """Return a verdict dict.
 
         Required keys: ``ok`` (bool), ``verdict`` (:class:`VerdictKind` value).
@@ -68,7 +68,7 @@ class NullVerifier:
 
     name = "null"
 
-    def verify(self, citation: str) -> Dict[str, Any]:
+    def verify(self, citation: str) -> dict[str, Any]:
         return {
             "ok": False,
             "verdict": VerdictKind.ERROR.value,
@@ -107,7 +107,7 @@ class AureliusVerifier:
     def __init__(self, max_results: int = 5) -> None:
         self.max_results = max_results
         self._verify_citation = None
-        self._offline: Optional[bool] = None
+        self._offline: bool | None = None
 
     @property
     def available(self) -> bool:
@@ -141,7 +141,7 @@ class AureliusVerifier:
             self._offline = True
         return not self._offline
 
-    def verify(self, citation: str) -> Dict[str, Any]:
+    def verify(self, citation: str) -> dict[str, Any]:
         fn = self._load()
         if fn is None:
             return NullVerifier().verify(citation)
@@ -170,7 +170,7 @@ class AureliusVerifier:
         return result
 
 
-_default: Optional[Verifier] = None
+_default: Verifier | None = None
 
 
 def get_default_verifier() -> Verifier:
@@ -182,7 +182,7 @@ def get_default_verifier() -> Verifier:
     return _default
 
 
-def set_default_verifier(verifier: Optional[Verifier]) -> None:
+def set_default_verifier(verifier: Verifier | None) -> None:
     """Override the default. Passing ``None`` restores lazy auto-detection."""
     global _default
     _default = verifier

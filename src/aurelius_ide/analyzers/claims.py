@@ -21,7 +21,6 @@ that cries wolf gets switched off, and a switched-off linter catches nothing.
 from __future__ import annotations
 
 import re
-from typing import List
 
 from ..diagnostics import Code, Diagnostic, Severity
 from ..document import ResearchDocument, Sentence
@@ -95,8 +94,8 @@ class UncitedClaimAnalyzer(BaseAnalyzer):
     name = "uncited_claim"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
-        out: List[Diagnostic] = []
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
+        out: list[Diagnostic] = []
         for sentence in doc.sentences:
             reason = self._claim_reason(sentence)
             if reason is None:

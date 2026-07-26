@@ -20,7 +20,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .config import get_cache_dir
 
@@ -36,12 +36,12 @@ class ResultCache:
     def __init__(
         self,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
-        path: Optional[Path] = None,
+        path: Path | None = None,
         persist: bool = True,
     ) -> None:
         self.ttl = ttl_seconds
         self._lock = threading.RLock()
-        self._mem: Dict[str, Dict[str, Any]] = {}
+        self._mem: dict[str, dict[str, Any]] = {}
         self._persist = persist
         self._path = path or (get_cache_dir() / "analysis_cache.json")
         self._dirty = False
@@ -52,7 +52,7 @@ class ResultCache:
     def key(analyzer: str, content_hash: str) -> str:
         return f"{analyzer}:{content_hash}"
 
-    def get(self, analyzer: str, content_hash: str) -> Optional[Any]:
+    def get(self, analyzer: str, content_hash: str) -> Any | None:
         k = self.key(analyzer, content_hash)
         with self._lock:
             record = self._mem.get(k)
@@ -80,7 +80,7 @@ class ResultCache:
             self._dirty = True
             self.flush()
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> dict[str, int]:
         with self._lock:
             return {"entries": len(self._mem)}
 

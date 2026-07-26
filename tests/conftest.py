@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
+
 from aurelius_ide.document import ResearchDocument
 from aurelius_ide.verification import VerdictKind
 
@@ -56,7 +57,7 @@ class StubVerifier:
         self.delay = delay
         self.calls = 0
 
-    def verify(self, citation: str) -> Dict[str, Any]:
+    def verify(self, citation: str) -> dict[str, Any]:
         self.calls += 1
         if self.delay:
             time.sleep(self.delay)

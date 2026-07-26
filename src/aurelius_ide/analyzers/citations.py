@@ -17,7 +17,7 @@ hallucinated reference — which is why it is the reason this project exists.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..cache import ResultCache
 from ..diagnostics import Code, Diagnostic, Severity
@@ -26,7 +26,7 @@ from ..verification import INCONCLUSIVE, VerdictKind, Verifier, get_default_veri
 from .base import BaseAnalyzer
 
 # Fields BibTeX itself will complain about, by entry type.
-_REQUIRED_FIELDS: Dict[str, tuple] = {
+_REQUIRED_FIELDS: dict[str, tuple] = {
     "article": ("author", "title", "journal", "year"),
     "inproceedings": ("author", "title", "booktitle", "year"),
     "book": ("author", "title", "publisher", "year"),
@@ -43,8 +43,8 @@ class UndefinedCitationAnalyzer(BaseAnalyzer):
     name = "undefined_citation"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
-        out: List[Diagnostic] = []
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
+        out: list[Diagnostic] = []
         known = set(doc.bib_entries)
         for ref in doc.undefined_keys():
             suggestion = _closest_key(ref.key, known)
@@ -69,7 +69,7 @@ class UnusedBibEntryAnalyzer(BaseAnalyzer):
     name = "unused_bib_entry"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
         # Ranges point into the .bib file, so they are only meaningful when the client
         # knows that URI. The engine routes these separately.
         return [
@@ -90,8 +90,8 @@ class IncompleteBibEntryAnalyzer(BaseAnalyzer):
     name = "incomplete_bib_entry"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
-        out: List[Diagnostic] = []
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
+        out: list[Diagnostic] = []
         for entry in doc.bib_entries.values():
             required = _REQUIRED_FIELDS.get(entry.entry_type)
             if not required:
@@ -131,13 +131,13 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
 
     def __init__(
         self,
-        cache: Optional[ResultCache] = None,
-        verifier: Optional[Verifier] = None,
+        cache: ResultCache | None = None,
+        verifier: Verifier | None = None,
     ) -> None:
         self.cache = cache or ResultCache()
         self.verifier = verifier or get_default_verifier()
 
-    def _fetch(self, citation: str) -> Dict[str, Any]:
+    def _fetch(self, citation: str) -> dict[str, Any]:
         """The single network call. Overridden in tests to keep them hermetic.
 
         Kept separate from :meth:`verify_entry` so that cache policy and transport can be
@@ -146,7 +146,7 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
         """
         return self.verifier.verify(citation)
 
-    def verify_entry(self, entry: BibEntry) -> Dict[str, Any]:
+    def verify_entry(self, entry: BibEntry) -> dict[str, Any]:
         """Cached single-entry verification. Public so the engine can warm entries."""
         h = entry.content_hash()
         hit = self.cache.get(self.name, h)
@@ -159,10 +159,10 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
         self.cache.set(self.name, h, result)
         return result
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
-        out: List[Diagnostic] = []
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
+        out: list[Diagnostic] = []
         cited = {r.key for r in doc.cite_refs}
-        verdicts: Dict[str, Dict[str, Any]] = {}
+        verdicts: dict[str, dict[str, Any]] = {}
 
         for key in cited:
             entry = doc.bib_entries.get(key)
@@ -197,7 +197,7 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
         return out
 
 
-def _diagnostic_for(result: Dict[str, Any], key: str):
+def _diagnostic_for(result: dict[str, Any], key: str):
     """Map a verification verdict to (severity, message, code), or None if clean.
 
     An inconclusive verdict produces nothing. Reporting "could not be verified" when the
@@ -244,7 +244,7 @@ def _diagnostic_for(result: Dict[str, Any], key: str):
     return None
 
 
-def _closest_key(target: str, candidates) -> Optional[str]:
+def _closest_key(target: str, candidates) -> str | None:
     """Cheap edit-distance suggestion for a mistyped key."""
     import difflib
 

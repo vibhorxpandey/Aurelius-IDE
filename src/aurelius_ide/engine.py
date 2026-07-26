@@ -26,8 +26,8 @@ from __future__ import annotations
 import inspect
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
 
 from .analyzers import DEFAULT_ANALYZERS
 from .analyzers.base import Analyzer
@@ -39,7 +39,7 @@ from .document import ResearchDocument
 #: never triggers one; short enough that a pause feels like an immediate response.
 DEFAULT_DEBOUNCE_MS = 700
 
-PublishCallback = Callable[[str, List[Diagnostic], int], None]
+PublishCallback = Callable[[str, list[Diagnostic], int], None]
 """``(uri, diagnostics, version)`` — how the engine hands results to a client."""
 
 
@@ -52,7 +52,7 @@ class EngineStats:
     total_instant_ms: float = 0.0
     total_network_ms: float = 0.0
 
-    def as_dict(self) -> Dict[str, float]:
+    def as_dict(self) -> dict[str, float]:
         return {
             "instant_passes": self.instant_passes,
             "network_passes": self.network_passes,
@@ -66,7 +66,7 @@ class EngineStats:
         }
 
 
-def _instantiate(classes, cache: ResultCache) -> List[Analyzer]:
+def _instantiate(classes, cache: ResultCache) -> list[Analyzer]:
     """Build the default analyzer set from :data:`DEFAULT_ANALYZERS`.
 
     Deriving the list from that constant rather than restating it here is what makes
@@ -74,7 +74,7 @@ def _instantiate(classes, cache: ResultCache) -> List[Analyzer]:
     that accept a ``cache`` argument are handed the engine's shared cache so that every
     consumer of a cached verdict — the analyzer, the engine, hover — sees the same one.
     """
-    out: List[Analyzer] = []
+    out: list[Analyzer] = []
     for cls in classes:
         takes_cache = "cache" in inspect.signature(cls).parameters
         out.append(cls(cache=cache) if takes_cache else cls())
@@ -84,9 +84,9 @@ def _instantiate(classes, cache: ResultCache) -> List[Analyzer]:
 @dataclass
 class _DocEntry:
     doc: ResearchDocument
-    instant: List[Diagnostic] = field(default_factory=list)
-    network: List[Diagnostic] = field(default_factory=list)
-    timer: Optional[threading.Timer] = None
+    instant: list[Diagnostic] = field(default_factory=list)
+    network: list[Diagnostic] = field(default_factory=list)
+    timer: threading.Timer | None = None
 
 
 class AnalysisEngine:
@@ -94,18 +94,18 @@ class AnalysisEngine:
 
     def __init__(
         self,
-        analyzers: Optional[List[Analyzer]] = None,
-        cache: Optional[ResultCache] = None,
+        analyzers: list[Analyzer] | None = None,
+        cache: ResultCache | None = None,
         debounce_ms: int = DEFAULT_DEBOUNCE_MS,
-        publish: Optional[PublishCallback] = None,
+        publish: PublishCallback | None = None,
     ) -> None:
         self.cache = cache or ResultCache()
         self.debounce_ms = debounce_ms
         self.publish = publish
         self.stats = EngineStats()
-        self._docs: Dict[str, _DocEntry] = {}
+        self._docs: dict[str, _DocEntry] = {}
         self._lock = threading.RLock()
-        self.analyzers: List[Analyzer] = (
+        self.analyzers: list[Analyzer] = (
             analyzers if analyzers is not None else _instantiate(DEFAULT_ANALYZERS, self.cache)
         )
 
@@ -117,8 +117,8 @@ class AnalysisEngine:
         text: str,
         version: int = 0,
         bib_text: str = "",
-        bib_uri: Optional[str] = None,
-    ) -> List[Diagnostic]:
+        bib_uri: str | None = None,
+    ) -> list[Diagnostic]:
         return self.update(uri, text, version, bib_text, bib_uri)
 
     def update(
@@ -127,8 +127,8 @@ class AnalysisEngine:
         text: str,
         version: int,
         bib_text: str = "",
-        bib_uri: Optional[str] = None,
-    ) -> List[Diagnostic]:
+        bib_uri: str | None = None,
+    ) -> list[Diagnostic]:
         """Reparse, run the instant pass, and schedule the network pass.
 
         Returns the instant diagnostics synchronously — the caller can publish them
@@ -159,12 +159,12 @@ class AnalysisEngine:
             if entry and entry.timer:
                 entry.timer.cancel()
 
-    def document(self, uri: str) -> Optional[ResearchDocument]:
+    def document(self, uri: str) -> ResearchDocument | None:
         with self._lock:
             entry = self._docs.get(uri)
             return entry.doc if entry else None
 
-    def diagnostics(self, uri: str) -> List[Diagnostic]:
+    def diagnostics(self, uri: str) -> list[Diagnostic]:
         """Current merged view: instant results plus the latest network results."""
         with self._lock:
             entry = self._docs.get(uri)
@@ -174,10 +174,10 @@ class AnalysisEngine:
 
     # -- passes ---------------------------------------------------------------------------
 
-    def _run_pass(self, doc: ResearchDocument, *, network: bool) -> List[Diagnostic]:
+    def _run_pass(self, doc: ResearchDocument, *, network: bool) -> list[Diagnostic]:
         started = time.perf_counter()
-        results: List[AnalysisResult] = []
-        out: List[Diagnostic] = []
+        results: list[AnalysisResult] = []
+        out: list[Diagnostic] = []
 
         for analyzer in self.analyzers:
             if bool(getattr(analyzer, "is_network", False)) != network:
@@ -253,8 +253,8 @@ class AnalysisEngine:
         uri: str,
         text: str,
         bib_text: str = "",
-        bib_uri: Optional[str] = None,
-    ) -> List[Diagnostic]:
+        bib_uri: str | None = None,
+    ) -> list[Diagnostic]:
         """Run every analyzer, network included, and block until done.
 
         This is the CLI / CI entry point — the one you put in a pre-submission gate.

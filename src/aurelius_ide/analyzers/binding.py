@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Dict, List, Optional
 
 from ..diagnostics import Code, Diagnostic, Severity
 from ..document import BibEntry, ResearchDocument
@@ -87,8 +86,8 @@ class CitationBindingAnalyzer(BaseAnalyzer):
     name = "citation_binding"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
-        out: List[Diagnostic] = []
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
+        out: list[Diagnostic] = []
         masked = _masked_view(doc)
 
         for m in _NARRATIVE_RE.finditer(masked):
@@ -169,7 +168,7 @@ def _masked_view(doc: ResearchDocument) -> str:
     return "".join(chars)
 
 
-def _mismatch(entry: BibEntry, prose_names: List[str], year: Optional[str]) -> Optional[str]:
+def _mismatch(entry: BibEntry, prose_names: list[str], year: str | None) -> str | None:
     """Describe how the entry contradicts the prose, or ``None`` if it is consistent."""
     surnames = _surnames(entry.author)
     if surnames and prose_names:
@@ -182,7 +181,7 @@ def _mismatch(entry: BibEntry, prose_names: List[str], year: Optional[str]) -> O
     return None
 
 
-def _name_matches(prose_name: str, surnames: List[str]) -> bool:
+def _name_matches(prose_name: str, surnames: list[str]) -> bool:
     """Match a prose surname against an entry's authors, tolerantly.
 
     Compound and particled surnames are written inconsistently between prose and BibTeX
@@ -207,13 +206,13 @@ def _name_matches(prose_name: str, surnames: List[str]) -> bool:
 _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv"})
 
 
-def _surnames(author_field: str) -> List[str]:
+def _surnames(author_field: str) -> list[str]:
     """Extract folded surnames from a BibTeX ``author`` field.
 
     Handles both conventions — ``Smith, Jane and Doe, John`` and ``Jane Smith and John
     Doe`` — because ``.bib`` files in the wild mix them freely, sometimes within one file.
     """
-    out: List[str] = []
+    out: list[str] = []
     for part in re.split(r"\s+and\s+", author_field):
         part = part.strip().rstrip(".,")
         if not part or part.lower() == "others":
@@ -242,11 +241,11 @@ def _fold(name: str) -> str:
 
 
 def _better_key(
-    entries: Dict[str, BibEntry],
-    prose_names: List[str],
-    year: Optional[str],
+    entries: dict[str, BibEntry],
+    prose_names: list[str],
+    year: str | None,
     exclude: str,
-) -> Optional[str]:
+) -> str | None:
     """Find an entry that *does* match the prose — usually the key the author meant.
 
     Only returned when exactly one entry matches. Two candidates means we would be
@@ -267,7 +266,7 @@ def _better_key(
     return matches[0] if len(matches) == 1 else None
 
 
-def _render(names: List[str], et_al: bool, year: Optional[str]) -> str:
+def _render(names: list[str], et_al: bool, year: str | None) -> str:
     text = " and ".join(names)
     if et_al:
         text += " et al."

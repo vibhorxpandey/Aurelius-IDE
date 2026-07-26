@@ -30,7 +30,6 @@ linter that flags real comments gets switched off within a day.
 from __future__ import annotations
 
 import re
-from typing import List
 
 from ..diagnostics import Code, Diagnostic, Severity
 from ..document import ResearchDocument, in_spans
@@ -48,9 +47,9 @@ class UnescapedPercentAnalyzer(BaseAnalyzer):
     name = "unescaped_percent"
     is_network = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
         text = doc.text
-        out: List[Diagnostic] = []
+        out: list[Diagnostic] = []
 
         for line_start, line in _lines(text):
             comment_at = _first_comment_offset(line)

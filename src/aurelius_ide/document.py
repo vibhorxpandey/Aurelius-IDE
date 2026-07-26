@@ -21,8 +21,8 @@ from __future__ import annotations
 import hashlib
 import re
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
 
 # --------------------------------------------------------------------------------------
 # Positions
@@ -53,7 +53,7 @@ class PositionIndex:
     """
 
     def __init__(self, text: str) -> None:
-        self._line_starts: List[int] = [0]
+        self._line_starts: list[int] = [0]
         for i, ch in enumerate(text):
             if ch == "\n":
                 self._line_starts.append(i + 1)
@@ -94,7 +94,7 @@ class BibEntry:
 
     key: str
     entry_type: str
-    fields: Dict[str, str]
+    fields: dict[str, str]
     start: int
     end: int
 
@@ -120,7 +120,7 @@ class BibEntry:
         The verifier takes free text (it extracts DOI / title / author / year itself), so
         we reconstruct a conventional reference line rather than inventing a new contract.
         """
-        bits: List[str] = []
+        bits: list[str] = []
         if self.author:
             bits.append(self.author.replace(" and ", ", "))
         if self.year:
@@ -159,7 +159,7 @@ class Sentence:
     text: str
     start: int
     end: int
-    cite_keys: List[str] = field(default_factory=list)
+    cite_keys: list[str] = field(default_factory=list)
     section: str = ""
 
     def content_hash(self) -> str:
@@ -258,14 +258,14 @@ def _mask_regions(text: str) -> str:
 _LITERAL_ARG_RE = re.compile(r"\\(?:url|href|path|nolinkurl|verb\*?)\s*\{[^}]*\}")
 
 
-def find_literal_spans(text: str) -> List[Tuple[int, int]]:
+def find_literal_spans(text: str) -> list[tuple[int, int]]:
     """Spans holding literal (non-prose) data: verbatim environments and URL arguments.
 
     Comments are masked first, mirroring :func:`_mask_regions`, so a ``\\begin{verbatim}``
     that is itself commented out does not open a region.
     """
     masked = _mask_comments(text)
-    spans: List[Tuple[int, int]] = []
+    spans: list[tuple[int, int]] = []
 
     for env in _VERBATIM_ENVS:
         pattern = re.compile(
@@ -278,7 +278,7 @@ def find_literal_spans(text: str) -> List[Tuple[int, int]]:
     return sorted(spans)
 
 
-def in_spans(spans: Sequence[Tuple[int, int]], offset: int) -> bool:
+def in_spans(spans: Sequence[tuple[int, int]], offset: int) -> bool:
     """True if ``offset`` falls inside any span. Linear; span counts are small."""
     return any(start <= offset < end for start, end in spans)
 
@@ -295,7 +295,7 @@ _ABBREVIATIONS = frozenset(
 _SENTENCE_END_RE = re.compile(r"[.!?](?=[\s~]|$)")
 
 
-def _split_sentences(masked: str, offset_base: int = 0) -> List[Tuple[str, int, int]]:
+def _split_sentences(masked: str, offset_base: int = 0) -> list[tuple[str, int, int]]:
     """Split masked prose into (text, start, end) triples.
 
     Sentence segmentation in LaTeX is genuinely awkward — ``et al.`` and ``Fig.~3`` are
@@ -303,7 +303,7 @@ def _split_sentences(masked: str, offset_base: int = 0) -> List[Tuple[str, int, 
     conservative rule: a terminator ends a sentence unless the preceding token is a known
     abbreviation or a single capital letter (an initial, as in "R. Fisher").
     """
-    results: List[Tuple[str, int, int]] = []
+    results: list[tuple[str, int, int]] = []
     start = 0
     for m in _SENTENCE_END_RE.finditer(masked):
         end = m.end()
@@ -322,7 +322,7 @@ def _split_sentences(masked: str, offset_base: int = 0) -> List[Tuple[str, int, 
     return results
 
 
-def _trim(masked: str, start: int, end: int, offset_base: int) -> Tuple[str, int, int]:
+def _trim(masked: str, start: int, end: int, offset_base: int) -> tuple[str, int, int]:
     """Shrink a span to its non-whitespace content.
 
     A sentence span naturally begins at the previous sentence's terminator, so it opens
@@ -364,9 +364,9 @@ def _match_brace(text: str, open_idx: int) -> int:
     return n
 
 
-def _parse_bib_fields(body: str) -> Dict[str, str]:
+def _parse_bib_fields(body: str) -> dict[str, str]:
     """Parse ``name = {value}`` / ``name = "value"`` / ``name = bareword`` pairs."""
-    fields: Dict[str, str] = {}
+    fields: dict[str, str] = {}
     i = 0
     n = len(body)
     while i < n:
@@ -398,13 +398,13 @@ def _parse_bib_fields(body: str) -> Dict[str, str]:
     return fields
 
 
-def parse_bibtex(text: str) -> Dict[str, BibEntry]:
+def parse_bibtex(text: str) -> dict[str, BibEntry]:
     """Parse a ``.bib`` file into ``{key: BibEntry}``.
 
     Later duplicates lose to earlier ones, mirroring BibTeX's own behaviour, and the
     duplicate is still detectable because callers can compare counts.
     """
-    entries: Dict[str, BibEntry] = {}
+    entries: dict[str, BibEntry] = {}
     for m in _BIB_ENTRY_START_RE.finditer(text):
         entry_type = m.group("type").lower()
         if entry_type in ("comment", "preamble", "string"):
@@ -443,19 +443,19 @@ class ResearchDocument:
     text: str
     version: int
     index: PositionIndex
-    cite_refs: List[CiteKeyRef]
-    sections: List[Section]
-    sentences: List[Sentence]
-    bib_entries: Dict[str, BibEntry]
-    bib_uri: Optional[str] = None
+    cite_refs: list[CiteKeyRef]
+    sections: list[Section]
+    sentences: list[Sentence]
+    bib_entries: dict[str, BibEntry]
+    bib_uri: str | None = None
     #: Offsets in :class:`BibEntry` index into the ``.bib`` text, not the ``.tex``, so
     #: they need their own line table. Mapping them through ``index`` yields plausible
     #: but entirely wrong line numbers — a bug worth naming, because it is silent.
-    bib_index: Optional[PositionIndex] = None
+    bib_index: PositionIndex | None = None
     #: Verbatim environments and URL arguments, as offsets into :attr:`text`. Analyzers
     #: that read the *raw* source rather than the masked view need these to stay out of
     #: regions where LaTeX's normal escaping rules do not apply.
-    literal_spans: List[Tuple[int, int]] = field(default_factory=list)
+    literal_spans: list[tuple[int, int]] = field(default_factory=list)
 
     @classmethod
     def parse(
@@ -464,12 +464,12 @@ class ResearchDocument:
         text: str,
         version: int = 0,
         bib_text: str = "",
-        bib_uri: Optional[str] = None,
+        bib_uri: str | None = None,
     ) -> ResearchDocument:
         index = PositionIndex(text)
         masked = _mask_regions(text)
 
-        cite_refs: List[CiteKeyRef] = []
+        cite_refs: list[CiteKeyRef] = []
         for m in _CITE_RE.finditer(masked):
             cmd = m.group("cmd")
             keys_raw = m.group("keys")
@@ -490,7 +490,7 @@ class ResearchDocument:
                     )
                 cursor += len(part) + 1
 
-        sections: List[Section] = []
+        sections: list[Section] = []
         section_matches = list(_SECTION_RE.finditer(masked))
         for i, m in enumerate(section_matches):
             end = section_matches[i + 1].start() if i + 1 < len(section_matches) else len(text)
@@ -516,7 +516,7 @@ class ResearchDocument:
                     prose[i] = " "
         prose_text = "".join(prose)[body_start:]
 
-        sentences: List[Sentence] = []
+        sentences: list[Sentence] = []
         for chunk, s, e in _split_sentences(prose_text, offset_base=body_start):
             keys = [r.key for r in cite_refs if s <= r.start < e]
             sentences.append(
@@ -545,13 +545,13 @@ class ResearchDocument:
 
     # -- convenience --------------------------------------------------------------------
 
-    def cited_keys(self) -> List[str]:
+    def cited_keys(self) -> list[str]:
         return sorted({r.key for r in self.cite_refs})
 
-    def undefined_keys(self) -> List[CiteKeyRef]:
+    def undefined_keys(self) -> list[CiteKeyRef]:
         return [r for r in self.cite_refs if r.key not in self.bib_entries]
 
-    def unused_entries(self) -> List[BibEntry]:
+    def unused_entries(self) -> list[BibEntry]:
         used = {r.key for r in self.cite_refs}
         return [e for e in self.bib_entries.values() if e.key not in used]
 
@@ -563,7 +563,7 @@ class ResearchDocument:
         index = self.bib_index or PositionIndex("")
         return index.range(start, end)
 
-    def cite_ref_at(self, offset: int) -> Optional[CiteKeyRef]:
+    def cite_ref_at(self, offset: int) -> CiteKeyRef | None:
         """The citation key under a cursor offset, if any — powers hover and code actions."""
         for ref in self.cite_refs:
             if ref.start <= offset <= ref.end:

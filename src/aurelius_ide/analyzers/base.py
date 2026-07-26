@@ -14,7 +14,7 @@ later, which is exactly how a code IDE separates parse errors from type errors.
 """
 from __future__ import annotations
 
-from typing import List, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ..diagnostics import Diagnostic
 from ..document import ResearchDocument
@@ -28,7 +28,7 @@ class Analyzer(Protocol):
     #: True if ``run`` performs I/O and must not block the editor's main loop.
     is_network: bool
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:
         ...
 
 
@@ -38,5 +38,5 @@ class BaseAnalyzer:
     name: str = "base"
     is_network: bool = False
 
-    def run(self, doc: ResearchDocument) -> List[Diagnostic]:  # pragma: no cover - abstract
+    def run(self, doc: ResearchDocument) -> list[Diagnostic]:  # pragma: no cover - abstract
         raise NotImplementedError

@@ -79,6 +79,66 @@ export const FileBibIcon = (p: IconProps) =>
     p
   );
 
+export const FileMermaidIcon = (p: IconProps) =>
+  base(
+    <>
+      <path
+        d="M4 2h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"
+        fill="#e57373"
+        stroke="none"
+        opacity="0.85"
+      />
+      <path d="M9 2v3h3" fill="#1e1e1e" stroke="none" />
+    </>,
+    p
+  );
+
+export const TerminalIcon = (p: IconProps) =>
+  base(
+    <>
+      <path d="M2.5 3h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.5 6l2.5 2-2.5 2M8.5 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </>,
+    p
+  );
+
+export const ActivityIcon = (p: IconProps) =>
+  base(
+    <path d="M2 8.5h2.5l1.5-4 3 8 1.5-4H14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />,
+    p
+  );
+
+export const DiagramIcon = (p: IconProps) =>
+  base(
+    <>
+      <rect x="2" y="2.5" width="5" height="3.5" rx="0.6" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="10" width="5" height="3.5" rx="0.6" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="2" y="10" width="5" height="3.5" rx="0.6" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.5 6v4M11.5 6v4M4.5 8h7" stroke="currentColor" strokeWidth="1.1" />
+    </>,
+    p
+  );
+
+export const ExtensionsIcon = (p: IconProps) =>
+  base(
+    <path
+      d="M6 2.5h4v2.3a1.2 1.2 0 0 0 1.9.95A1.5 1.5 0 1 1 13.5 8.4 1.2 1.2 0 0 0 12.5 10H14v4h-4v-1.4a1.2 1.2 0 0 0-2.3-.5A1.5 1.5 0 1 1 5.4 9.6 1.2 1.2 0 0 0 6.5 8H2V4h1.4a1.2 1.2 0 0 0 .5-2.3A1.5 1.5 0 1 1 6.4 3.4 1.2 1.2 0 0 0 6 2.5Z"
+      stroke="currentColor"
+      strokeWidth="1.1"
+      strokeLinejoin="round"
+    />,
+    p
+  );
+
+export const UserIcon = (p: IconProps) =>
+  base(
+    <>
+      <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2.5 13.5c1-2.8 3.2-4 5.5-4s4.5 1.2 5.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>,
+    p
+  );
+
 export const FileGenericIcon = (p: IconProps) =>
   base(
     <>

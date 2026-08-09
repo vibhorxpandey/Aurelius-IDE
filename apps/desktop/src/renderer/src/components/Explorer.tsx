@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FsEntry } from "@shared/lsp-types";
 import { getApi } from "../platform";
-import { ChevronIcon, FolderIcon, FileTexIcon, FileBibIcon, FileGenericIcon } from "./icons";
+import { ChevronIcon, FolderIcon, FileTexIcon, FileBibIcon, FileMermaidIcon, FileGenericIcon } from "./icons";
 
 interface ExplorerProps {
   rootPath: string;
@@ -12,6 +12,7 @@ interface ExplorerProps {
 function iconFor(name: string) {
   if (name.endsWith(".tex") || name.endsWith(".ltx")) return FileTexIcon;
   if (name.endsWith(".bib")) return FileBibIcon;
+  if (name.endsWith(".mmd") || name.endsWith(".mermaid")) return FileMermaidIcon;
   return FileGenericIcon;
 }
 

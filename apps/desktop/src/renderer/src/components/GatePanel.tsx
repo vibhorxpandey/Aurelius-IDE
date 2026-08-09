@@ -6,9 +6,10 @@ import { PlayIcon, CheckCircleIcon, ErrorIcon, SkipCircleIcon } from "./icons";
 interface GatePanelProps {
   client: LspClient | null;
   activeUri: string | null;
+  onActivity?: (title: string, details: string[]) => void;
 }
 
-export default function GatePanel({ client, activeUri }: GatePanelProps) {
+export default function GatePanel({ client, activeUri, onActivity }: GatePanelProps) {
   const [result, setResult] = useState<GateResult | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -18,6 +19,15 @@ export default function GatePanel({ client, activeUri }: GatePanelProps) {
     try {
       const r = await client.executeCommand<GateResult>("aurelius.submissionGate", [activeUri]);
       setResult(r);
+      if (r.ok) {
+        const status = r.blocking > 0 ? "NOT READY" : r.skipped > 0 ? "INCONCLUSIVE" : "READY";
+        onActivity?.(
+          `Submission gate: ${status}`,
+          r.checks.map((c) => `[${c.status}] ${c.label}`)
+        );
+      } else {
+        onActivity?.("Submission gate could not run", [r.reason ?? "unknown reason"]);
+      }
     } finally {
       setRunning(false);
     }

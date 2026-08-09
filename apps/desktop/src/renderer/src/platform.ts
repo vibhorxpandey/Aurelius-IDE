@@ -30,6 +30,8 @@ const mockFiles: Record<string, string> = {
   "/demo-workspace/paper.tex": DEMO_PAPER,
   "/demo-workspace/references.bib":
     "@article{thakur2021beir,\n  author = {Thakur, Nandan},\n  title = {BEIR},\n  year = {2021}\n}\n",
+  "/demo-workspace/architecture.mmd":
+    "flowchart LR\n  client[client.ts] -- LSP --> server[lsp.py]\n  server --> engine[engine.py]\n",
 };
 
 /** A read-only stand-in used only when there is no Electron preload bridge. */
@@ -39,6 +41,7 @@ const mockApi: AureliusApi = {
     list: async (path: string): Promise<FsEntry[]> => {
       if (path !== "/demo-workspace") return [];
       return [
+        { name: "architecture.mmd", path: "/demo-workspace/architecture.mmd", isDirectory: false },
         { name: "paper.tex", path: "/demo-workspace/paper.tex", isDirectory: false },
         { name: "references.bib", path: "/demo-workspace/references.bib", isDirectory: false },
       ];
@@ -62,6 +65,15 @@ const mockApi: AureliusApi = {
       return () => {};
     },
     onStderr: () => () => {},
+  },
+  terminal: {
+    start: () => {},
+    write: () => {},
+    onData: (handler) => {
+      handler("Preview mode — the integrated terminal needs Electron.\r\n$ ");
+      return () => {};
+    },
+    onExit: () => () => {},
   },
 };
 

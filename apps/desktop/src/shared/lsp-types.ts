@@ -132,4 +132,10 @@ export interface AureliusApi {
     onStatus: (handler: (status: ServerStatus) => void) => () => void;
     onStderr: (handler: (text: string) => void) => () => void;
   };
+  terminal: {
+    start: () => void;
+    write: (data: string) => void;
+    onData: (handler: (chunk: string) => void) => () => void;
+    onExit: (handler: (code: number | null) => void) => () => void;
+  };
 }

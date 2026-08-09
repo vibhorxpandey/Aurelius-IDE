@@ -7,6 +7,8 @@ import { ModelRegistry } from "./editor/modelRegistry";
 import { applyDiagnostics } from "./editor/diagnostics";
 import { registerLanguages } from "./monaco/languages";
 import { detectLanguage, basename, type EditorTab } from "./state/types";
+import { loadProfile, saveProfile, clearProfile, avatarColour, initials, type UserProfile } from "./state/profile";
+import { makeEvent, type ActivityEvent, type ActivityKind } from "./state/activity";
 
 import ActivityBar, { type ActivityView } from "./components/ActivityBar";
 import Explorer from "./components/Explorer";
@@ -16,27 +18,44 @@ import StatusBar from "./components/StatusBar";
 import ProblemsPanel from "./components/ProblemsPanel";
 import BibliographyPanel from "./components/BibliographyPanel";
 import GatePanel from "./components/GatePanel";
+import DiagramsPanel from "./components/DiagramsPanel";
+import AgentActivityPanel from "./components/AgentActivityPanel";
+import ExtensionsView from "./components/ExtensionsView";
+import MermaidPreview from "./components/MermaidPreview";
+import LoginScreen from "./components/LoginScreen";
+import ProfilePanel from "./components/ProfilePanel";
 import { LogoMark } from "./components/icons";
 
 // Runs once at module load, before any Monaco editor or model is created.
 registerLanguages();
 
 const DEBOUNCE_MS = 400;
+const ACTIVITY_LOG_CAP = 150;
 
 export default function App() {
+  const [profile, setProfile] = useState<UserProfile | null>(() => loadProfile());
+  const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+
   const [rootPath, setRootPath] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeUri, setActiveUri] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActivityView>("explorer");
   const [problemsCollapsed, setProblemsCollapsed] = useState(false);
+  const [bottomTab, setBottomTab] = useState<"problems" | "terminal">("problems");
   const [diagnosticsByUri, setDiagnosticsByUri] = useState<Map<string, LspDiagnostic[]>>(new Map());
   const [refreshToken, setRefreshToken] = useState(0);
   const [revealTarget, setRevealTarget] = useState<{ uri: string; line: number } | null>(null);
+  const [mermaidLive, setMermaidLive] = useState("");
+  const [activityLog, setActivityLog] = useState<ActivityEvent[]>([]);
 
   const registry = useRef(new ModelRegistry()).current;
   const clientRef = useRef<LspClient | null>(null);
   const debounceTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const logActivity = useCallback((kind: ActivityKind, title: string, details: string[] = []) => {
+    setActivityLog((prev) => [...prev.slice(-(ACTIVITY_LOG_CAP - 1)), makeEvent(kind, title, details)]);
+  }, []);
 
   // Resolve the workspace once on launch — the bundled demo folder in Electron, or the
   // static preview root when running outside it.
@@ -53,7 +72,16 @@ export default function App() {
     const client = new LspClient(rootPath);
     clientRef.current = client;
 
-    const offStatus = client.onStatus(setServerStatus);
+    const offStatus = client.onStatus((status) => {
+      setServerStatus(status);
+      if (status.state === "running") logActivity("connect", "Connected to aurelius-lsp", [status.detail]);
+      else if (status.state === "crashed" || status.state === "not-found") {
+        logActivity("error", status.state === "crashed" ? "Language server crashed" : "Language server unavailable", [
+          status.detail,
+        ]);
+      }
+    });
+
     const offDiagnostics = client.onDiagnostics((uri, diags) => {
       const model = registry.get(uri);
       if (model) applyDiagnostics(model, diags);
@@ -63,6 +91,21 @@ export default function App() {
         return next;
       });
       setRefreshToken((t) => t + 1);
+
+      // The kind is read off which codes are present, not asserted: AUR002/003/004 only
+      // ever appear once the network verification pass has landed, so their presence *is*
+      // the signal that this batch is the second, slower half of the two-phase split.
+      const hasVerification = diags.some((d) => ["AUR002", "AUR003", "AUR004"].includes(d.code));
+      const fileName = basename(fileUriToPath(uri));
+      const count = diags.length;
+      const title = hasVerification
+        ? `Checked references in ${fileName} — ${count} finding${count === 1 ? "" : "s"}`
+        : `Analyzed ${fileName} — ${count} finding${count === 1 ? "" : "s"}`;
+      logActivity(
+        hasVerification ? "verified" : "structural",
+        title,
+        diags.slice(0, 6).map((d) => `[${d.code}] ${d.message}`)
+      );
     });
 
     return () => {
@@ -115,7 +158,9 @@ export default function App() {
         try {
           const content = await getApi().workspace.read(path);
           registry.getOrCreate(uri, language, content);
-          await clientRef.current?.didOpen(uri, language, registry.version(uri), content);
+          if (language !== "mermaid") {
+            await clientRef.current?.didOpen(uri, language, registry.version(uri), content);
+          }
         } finally {
           pendingOpens.current.delete(uri);
         }
@@ -164,6 +209,22 @@ export default function App() {
     [registry]
   );
 
+  // Keeps the Mermaid split-view preview in sync with the active diagram's source. Kept
+  // independent of handleContentChange (which drives LSP didChange) because a .mmd file
+  // never goes through the language server at all — it's a client-only preview concern.
+  useEffect(() => {
+    const tab = tabs.find((t) => t.uri === activeUri);
+    if (!tab || tab.language !== "mermaid" || !activeUri) {
+      setMermaidLive("");
+      return;
+    }
+    const model = registry.get(activeUri);
+    if (!model) return;
+    setMermaidLive(model.getValue());
+    const disposable = model.onDidChangeContent(() => setMermaidLive(model.getValue()));
+    return () => disposable.dispose();
+  }, [activeUri, tabs, registry]);
+
   const saveActive = useCallback(async () => {
     if (!activeUri) return;
     const model = registry.get(activeUri);
@@ -185,7 +246,19 @@ export default function App() {
     void getApi().lsp.restart();
   }, []);
 
+  const handleSignOut = useCallback(() => {
+    clearProfile();
+    setProfile(null);
+    setProfilePanelOpen(false);
+  }, []);
+
+  const handleLogin = useCallback((p: UserProfile) => {
+    saveProfile(p);
+    setProfile(p);
+  }, []);
+
   const activeTab = tabs.find((t) => t.uri === activeUri) ?? null;
+  const isMermaidActive = activeTab?.language === "mermaid";
 
   const allDiagnostics = useMemo(() => Array.from(diagnosticsByUri.values()).flat(), [diagnosticsByUri]);
   const errors = allDiagnostics.filter((d) => d.severity === 1).length;
@@ -194,6 +267,11 @@ export default function App() {
     (d) => d.severity === 1 && ["AUR001", "AUR002", "AUR003", "AUR004"].includes(d.code)
   ).length;
   const gateBlocking = allDiagnostics.filter((d) => d.code === "AUR010").length;
+  const latexUri = tabs.find((t) => t.language === "latex")?.uri ?? activeUri;
+
+  if (!profile) {
+    return <LoginScreen onContinue={handleLogin} />;
+  }
 
   return (
     <div className="shell">
@@ -202,6 +280,14 @@ export default function App() {
           <LogoMark size={16} />
         </span>
         <span className="shell__titlebar-title">Aurelius — prototype desktop shell</span>
+        <span
+          className="titlebar-avatar"
+          style={{ background: avatarColour(profile.name) }}
+          title={profile.name}
+          onClick={() => setProfilePanelOpen((v) => !v)}
+        >
+          {initials(profile.name)}
+        </span>
       </div>
 
       {!isElectron && (
@@ -233,15 +319,22 @@ export default function App() {
             ) : activeView === "bibliography" ? (
               <BibliographyPanel
                 client={clientRef.current}
-                activeUri={tabs.find((t) => t.language === "latex")?.uri ?? activeUri}
+                activeUri={latexUri}
                 refreshToken={refreshToken}
                 onReveal={revealInEditor}
               />
-            ) : (
+            ) : activeView === "gate" ? (
               <GatePanel
                 client={clientRef.current}
-                activeUri={tabs.find((t) => t.language === "latex")?.uri ?? activeUri}
+                activeUri={latexUri}
+                onActivity={(title, details) => logActivity("gate", title, details)}
               />
+            ) : activeView === "diagrams" ? (
+              <DiagramsPanel rootPath={rootPath} activePath={activeTab?.path ?? null} onOpenFile={(p) => void openFile(p)} />
+            ) : activeView === "agent" ? (
+              <AgentActivityPanel events={activityLog} />
+            ) : (
+              <ExtensionsView />
             )}
           </div>
         </div>
@@ -259,6 +352,23 @@ export default function App() {
                   save · diagnostics run live as you type
                 </div>
               </div>
+            ) : isMermaidActive ? (
+              <div className="split-view">
+                <div className="split-view__pane">
+                  <div className="split-view__label">Source</div>
+                  <EditorPane
+                    activeUri={activeUri}
+                    registry={registry}
+                    onContentChange={handleContentChange}
+                    onSaveRequested={() => void saveActive()}
+                    revealTarget={revealTarget}
+                  />
+                </div>
+                <div className="split-view__pane">
+                  <div className="split-view__label">Live preview</div>
+                  <MermaidPreview content={mermaidLive} />
+                </div>
+              </div>
             ) : (
               <EditorPane
                 activeUri={activeUri}
@@ -273,9 +383,26 @@ export default function App() {
               collapsed={problemsCollapsed}
               onToggle={() => setProblemsCollapsed((v) => !v)}
               onJump={revealInEditor}
+              bottomTab={bottomTab}
+              onBottomTabChange={setBottomTab}
             />
           </div>
         </div>
+
+        {profilePanelOpen && (
+          <ProfilePanel
+            profile={profile}
+            onSignOut={handleSignOut}
+            onClose={() => setProfilePanelOpen(false)}
+            serverStatus={serverStatus}
+            stats={{
+              filesOpen: tabs.length,
+              errors,
+              warnings,
+              filesAnalyzed: diagnosticsByUri.size,
+            }}
+          />
+        )}
       </div>
 
       <StatusBar

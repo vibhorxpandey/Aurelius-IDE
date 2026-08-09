@@ -1,6 +1,6 @@
-import { ExplorerIcon, BookIcon, GateIcon } from "./icons";
+import { ExplorerIcon, BookIcon, GateIcon, DiagramIcon, ActivityIcon, ExtensionsIcon } from "./icons";
 
-export type ActivityView = "explorer" | "bibliography" | "gate";
+export type ActivityView = "explorer" | "bibliography" | "gate" | "diagrams" | "agent" | "extensions";
 
 interface ActivityBarProps {
   active: ActivityView;
@@ -13,6 +13,9 @@ const ITEMS: { id: ActivityView; label: string; Icon: typeof ExplorerIcon }[] = 
   { id: "explorer", label: "Explorer", Icon: ExplorerIcon },
   { id: "bibliography", label: "Bibliography", Icon: BookIcon },
   { id: "gate", label: "Submission Gate", Icon: GateIcon },
+  { id: "diagrams", label: "Architecture & Diagrams", Icon: DiagramIcon },
+  { id: "agent", label: "Agent Activity", Icon: ActivityIcon },
+  { id: "extensions", label: "Extensions", Icon: ExtensionsIcon },
 ];
 
 export default function ActivityBar({
@@ -34,7 +37,7 @@ export default function ActivityBar({
               title={label}
               onClick={() => onChange(id)}
             >
-              <Icon size={22} />
+              <Icon size={20} />
               {badge > 0 && <span className="activitybar__badge">{badge > 99 ? "99+" : badge}</span>}
             </div>
           );

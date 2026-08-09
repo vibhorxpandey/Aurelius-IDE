@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph editor["editors/vscode — TypeScript, thin client"]
+        ext[extension.ts]
+        client[client.ts]
+    end
+
+    subgraph server["aurelius_ide — Python, stdlib-only core"]
+        lsp[lsp.py]
+        engine[engine.py]
+        analyzers["analyzers/ (6 checks)"]
+        document[document.py]
+        cache[cache.py]
+        verification[verification.py]
+        compiling[compiling.py]
+    end
+
+    indexes[("OpenAlex · Crossref · arXiv · Semantic Scholar")]
+
+    ext --> client
+    client -- "LSP over stdio" --> lsp
+    lsp --> engine
+    engine --> analyzers
+    analyzers --> document
+    analyzers --> cache
+    analyzers -- "network pass" --> verification
+    lsp -. "aurelius.compileGate" .-> compiling
+    verification -- "citation check" --> indexes
+
+    style server fill:#1e1e1e,stroke:#569cd6
+    style editor fill:#1e1e1e,stroke:#4ec9b0
+    style indexes fill:#1e1e1e,stroke:#cc7832

@@ -1,4 +1,4 @@
-import { FileTexIcon, FileBibIcon, FileGenericIcon, CloseIcon } from "./icons";
+import { FileTexIcon, FileBibIcon, FileMermaidIcon, FileGenericIcon, CloseIcon } from "./icons";
 import type { EditorTab } from "../state/types";
 
 interface TabBarProps {
@@ -11,6 +11,7 @@ interface TabBarProps {
 function iconFor(language: EditorTab["language"]) {
   if (language === "latex") return FileTexIcon;
   if (language === "bibtex") return FileBibIcon;
+  if (language === "mermaid") return FileMermaidIcon;
   return FileGenericIcon;
 }
 

@@ -1,11 +1,13 @@
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { LspServerProcess } from "./lspServer.js";
+import { TerminalProcess } from "./terminalProcess.js";
 import { listDirectory, readTextFile, writeTextFile, isDirectory } from "./workspaceFs.js";
 import type { JsonRpcMessage } from "../shared/lsp-types";
 
 let mainWindow: BrowserWindow | null = null;
 let lsp: LspServerProcess | null = null;
+let terminal: TerminalProcess | null = null;
 
 // The bundled demo workspace ships intentional errors — an undefined key, uncited claims,
 // an orphaned bibliography entry — so the moment the window opens, the Problems panel has
@@ -45,6 +47,8 @@ function createWindow(): void {
 
   lsp = new LspServerProcess(mainWindow);
   void lsp.start();
+
+  terminal = new TerminalProcess(mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -58,10 +62,14 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   lsp?.stop();
+  terminal?.stop();
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => lsp?.stop());
+app.on("before-quit", () => {
+  lsp?.stop();
+  terminal?.stop();
+});
 
 function registerIpc(): void {
   ipcMain.handle("workspace:default-path", () => DEFAULT_WORKSPACE);
@@ -86,4 +94,7 @@ function registerIpc(): void {
       await lsp.start();
     }
   });
+
+  ipcMain.on("terminal:start", () => terminal?.start(DEFAULT_WORKSPACE));
+  ipcMain.on("terminal:write", (_e, data: string) => terminal?.write(data));
 }

@@ -1,4 +1,4 @@
-export type EditorLanguage = "latex" | "bibtex" | "plaintext";
+export type EditorLanguage = "latex" | "bibtex" | "mermaid" | "plaintext";
 
 export interface EditorTab {
   uri: string;
@@ -11,6 +11,7 @@ export interface EditorTab {
 export function detectLanguage(path: string): EditorLanguage {
   if (/\.(tex|ltx)$/i.test(path)) return "latex";
   if (/\.bib$/i.test(path)) return "bibtex";
+  if (/\.(mmd|mermaid)$/i.test(path)) return "mermaid";
   return "plaintext";
 }
 

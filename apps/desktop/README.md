@@ -1,8 +1,9 @@
 # Aurelius Desktop — prototype
 
 A VS Code–shaped desktop shell for Aurelius: activity bar, file explorer, tabs, a Monaco
-editor, a Problems panel, and dedicated Bibliography and Submission Gate panels — wired to
-the **real** `aurelius-lsp` language server, not mocked data.
+editor, a Problems panel, an integrated terminal, and dedicated Bibliography, Submission
+Gate, Diagrams, Agent Activity, and Extensions panels — wired to the **real**
+`aurelius-lsp` language server, not mocked data.
 
 ## What this is, and isn't
 
@@ -40,7 +41,19 @@ PATH and runs the server as a module, so no console-script PATH issues.
 
 Opens with `demo-workspace/paper.tex`, which carries the same intentional errors used
 throughout this project's docs and tests: an undefined citation key, an uncited claim, and
-prose with no source. Diagnostics appear as you type; they are not staged.
+prose with no source. Diagnostics appear as you type; they are not staged. A local profile
+gate (name only, no password — see below) runs once per machine before the workspace opens.
+
+## The six additions, and what's real about each
+
+| Feature | What's real | What isn't |
+|---|---|---|
+| **Login** | A local display identity, stored in `localStorage`. Personalises the workspace and the profile panel. | Not authentication — no password, no backend, no third-party sign-in. Said so on the screen itself. |
+| **Right profile panel** | Every number is read off the same diagnostics state the rest of the app renders from — files open, errors, warnings, files analyzed. No separate stats source to drift out of sync. | — |
+| **Terminal** | A genuine shell process (`cmd.exe` / `$SHELL`), spawned by the main process, streaming real stdout/stderr. Run `ls`, `git status`, `python --version` — they actually execute. | Not a full PTY (no `node-pty`, to avoid a native-compilation dependency). Line-buffered with local echo, not real terminal semantics — arrow-key history and full-screen programs (vim, htop) don't work. |
+| **Agent Activity** | Every entry is derived from an actual `publishDiagnostics` batch, status change, or gate run the client received. "Structural" vs. "verification" pass is read off which diagnostic codes are present (AUR002/003/004 are network-only) — the real two-phase split from `ARCHITECTURE.md` § 4, made visible. | — |
+| **Architecture & Diagrams** | Live Mermaid rendering (`mermaid.render`, sandboxed via `securityLevel: "strict"`) of `.mmd` files, source and preview updating together. `demo-workspace/architecture.mmd` diagrams Aurelius's own real module layout. | — |
+| **Extensions** | 4 built-in tools (Bibliography, Submission Gate, Diagrams, Agent Activity) — these are the real panels above, just also listed here. | 113 marketplace entries are catalogue data (`data/extensions.ts`) for a populated-looking view — nothing installs or runs. Said so in the panel's own doc comment. |
 
 ## Architecture, briefly
 
@@ -55,14 +68,18 @@ src/renderer/src/
   editor/             Model registry (one persistent Monaco instance, models swap on tab
                        change — losing scroll position on every click is not acceptable)
                        and diagnostic-to-marker conversion.
-  monaco/languages.ts  Monaco ships no LaTeX/BibTeX language; these are hand-written
-                       Monarch tokenizers, not full grammars.
-  components/          The shell: ActivityBar, Explorer, TabBar, EditorPane, StatusBar,
-                       ProblemsPanel, BibliographyPanel, GatePanel.
+  monaco/languages.ts  Monaco ships no LaTeX/BibTeX/Mermaid language; these are
+                       hand-written Monarch tokenizers, not full grammars.
+  state/               profile.ts (local identity), activity.ts (the live event log).
+  components/          ActivityBar, Explorer, TabBar, EditorPane, StatusBar,
+                       ProblemsPanel (also hosts the Terminal tab), BibliographyPanel,
+                       GatePanel, DiagramsPanel, MermaidPreview, AgentActivityPanel,
+                       ExtensionsView, LoginScreen, ProfilePanel.
   platform.ts          Detects whether a preload bridge exists. Outside Electron (e.g. a
                        browser pointed at the Vite dev server) the shell still renders
                        with static content, clearly labelled — real operations refuse
                        rather than fake a result.
+src/main/terminalProcess.ts  Spawns the real shell for the integrated terminal.
 ```
 
 ## Known gaps, honestly

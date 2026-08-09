@@ -10,6 +10,7 @@ import * as monaco from "monaco-editor";
 export function registerLanguages(): void {
   registerLatex();
   registerBibtex();
+  registerMermaid();
   defineAureliusTheme();
 }
 
@@ -79,6 +80,39 @@ function registerBibtex(): void {
         [/[{}]/, "delimiter.curly"],
         [/".*?"/, "string"],
         [/\d{4}\b/, "number"],
+      ],
+    },
+  });
+}
+
+function registerMermaid(): void {
+  monaco.languages.register({ id: "mermaid", extensions: [".mmd", ".mermaid"], aliases: ["Mermaid"] });
+
+  monaco.languages.setLanguageConfiguration("mermaid", {
+    comments: { lineComment: "%%" },
+    brackets: [
+      ["{", "}"],
+      ["[", "]"],
+      ["(", ")"],
+    ],
+  });
+
+  monaco.languages.setMonarchTokensProvider("mermaid", {
+    defaultToken: "",
+    keywords: [
+      "flowchart", "graph", "sequenceDiagram", "classDiagram", "stateDiagram", "erDiagram",
+      "gantt", "pie", "subgraph", "end", "participant", "loop", "alt", "else", "opt",
+      "TB", "TD", "BT", "RL", "LR", "style", "classDef", "class",
+    ],
+    tokenizer: {
+      root: [
+        [/%%.*$/, "comment"],
+        [/-->|--x|--o|->>|-->>|-\.->|==>/, "keyword"],
+        [/\|[^|]*\|/, "string"],
+        [/\[\(.*?\)\]|\(\(.*?\)\)|\[\[.*?\]\]/, "type"],
+        [/[a-zA-Z_]\w*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
+        [/["'].*?["']/, "string"],
+        [/[{}[\]()]/, "delimiter.curly"],
       ],
     },
   });

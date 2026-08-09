@@ -43,6 +43,20 @@ const api: AureliusApi = {
       return () => ipcRenderer.removeListener("lsp:stderr", listener);
     },
   },
+  terminal: {
+    start: (): void => ipcRenderer.send("terminal:start"),
+    write: (data: string): void => ipcRenderer.send("terminal:write", data),
+    onData: (handler: (chunk: string) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, chunk: string) => handler(chunk);
+      ipcRenderer.on("terminal:data", listener);
+      return () => ipcRenderer.removeListener("terminal:data", listener);
+    },
+    onExit: (handler: (code: number | null) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, code: number | null) => handler(code);
+      ipcRenderer.on("terminal:exit", listener);
+      return () => ipcRenderer.removeListener("terminal:exit", listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("aurelius", api);

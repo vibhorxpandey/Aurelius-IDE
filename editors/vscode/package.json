@@ -2,7 +2,7 @@
   "name": "aurelius-ide",
   "displayName": "Aurelius — Research Paper Linter",
   "description": "Live citation verification, retraction checking, and a submission gate for LaTeX papers.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "vibhorxpandey",
   "license": "MIT",
   "repository": {

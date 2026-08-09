@@ -29,6 +29,27 @@ rename is a breaking change even though nothing fails to compile.
 
 ## [Unreleased]
 
+## [0.3.1] — unreleased
+
+### Fixed
+
+- **Bibliography resolution was silently broken on Windows for every real LSP client.**
+  `_uri_to_path` parsed the standard triple-slash Windows file URI (`file:///D:/...` — the
+  form VS Code, and any other real client, actually sends) into a path that
+  `.is_absolute()` reports as `False`. Every citation in every paper looked undefined,
+  because `resolve_bib`'s sibling-`.bib` glob and its explicit-declaration lookup both
+  resolve against `tex_path.parent`, which was silently the wrong directory. The compile
+  gate's sibling-file staging degraded the same way — no error, just files quietly not
+  found.
+
+  Found by building a second real LSP client (a desktop prototype, `apps/desktop/`) and
+  running it against real Windows paths — the first place in this project's history a raw
+  `file://` URI built by an external client was round-tripped through `_uri_to_path` and
+  actually checked. `Path.as_uri()`, the reverse direction, was always correct; only the
+  URI-to-path direction was broken, which is why nothing caught it: every existing test
+  only ever builds a URI *from* a path, never parses one *back*. `tests/test_lsp.py` closes
+  that gap.
+
 ## [0.3.0] — unreleased
 
 First version intended for release. `0.1.0` and `0.2.0` existed only in the repository and
@@ -86,5 +107,6 @@ Carried deliberately into this release; see
   inherit the shell `PATH`.
 - `_probe_network` imports `httpx`, which is not a declared dependency.
 
-[Unreleased]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/vibhorxpandey/Aurelius-IDE/releases/tag/v0.3.0

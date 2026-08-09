@@ -1,0 +1,99 @@
+/*
+ * Tokens approximating VS Code's Dark+ theme. Not sourced from vscode's actual theme
+ * JSON — this is a prototype shell, and hand-matching the handful of colours that are
+ * visible in this UI gets 95% of the recognition value without a theming pipeline.
+ */
+:root {
+  --bg-shell: #181818;
+  --bg-activitybar: #1e1e1e;
+  --bg-sidebar: #181818;
+  --bg-sidebar-header: #181818;
+  --bg-editor: #1e1e1e;
+  --bg-editor-group-header: #252526;
+  --bg-tab-active: #1e1e1e;
+  --bg-tab-inactive: #181818;
+  --bg-statusbar: #007acc;
+  --bg-panel: #181818;
+  --bg-hover: #2a2d2e;
+  --bg-selected: #094771;
+  --bg-list-focus: #04395e;
+
+  --border: #2b2b2b;
+  --border-strong: #454545;
+
+  --fg-default: #cccccc;
+  --fg-muted: #8b8b8b;
+  --fg-dim: #6a6a6a;
+  --fg-inverse: #ffffff;
+
+  --accent: #0078d4;
+  --accent-hover: #1c86dd;
+
+  --sev-error: #f14c4c;
+  --sev-warning: #cca700;
+  --sev-info: #3794ff;
+  --sev-hint: #8b8b8b;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", Consolas, "Courier New", monospace;
+
+  --activitybar-width: 48px;
+  --sidebar-width: 280px;
+  --statusbar-height: 22px;
+  --tabbar-height: 35px;
+  --titlebar-height: 30px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-shell);
+  color: var(--fg-default);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+
+::selection {
+  background: var(--bg-selected);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #3e3e3e;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+svg {
+  display: block;
+  flex-shrink: 0;
+}

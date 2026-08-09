@@ -38,11 +38,32 @@ SERVER_VERSION = __version__
 _BIB_DECL_RE = re.compile(r"\\(?:bibliography|addbibresource)\s*\{([^}]*)\}")
 
 
+#: A URI path component that starts with a drive letter, e.g. the `/D:/...` produced by
+#: parsing `file:///D:/...` — the standard triple-slash form every real LSP client sends
+#: for a Windows path (VS Code's `Uri.toString()` included).
+_WINDOWS_DRIVE_RE = re.compile(r"^/[A-Za-z]:")
+
+
 def _uri_to_path(uri: str) -> Path | None:
+    """Invert :func:`_path_to_uri` — ``Path.as_uri()`` reversed.
+
+    ``urlparse`` on ``file:///D:/foo`` yields the path component ``/D:/foo``, leading
+    slash included. On Windows, handing that straight to ``Path()`` produces a *relative*
+    path — ``WindowsPath('/D:/foo').is_absolute()`` is ``False`` — that resolves against
+    the current drive rather than the file that was actually opened. Every caller of this
+    function silently gets the wrong file: bibliography discovery finds nothing, the
+    compile gate's sibling-staging step no-ops because the parent directory "doesn't
+    exist". This was undetected because it only manifests with a real ``file://`` URI from
+    an external client (VS Code, this repo's desktop prototype) — nothing in the test
+    suite ever round-trips a hand-built URI string on Windows.
+    """
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         return None
-    return Path(unquote(parsed.path))
+    raw = unquote(parsed.path)
+    if _WINDOWS_DRIVE_RE.match(raw):
+        raw = raw[1:]
+    return Path(raw)
 
 
 def _path_to_uri(path: Path) -> str:

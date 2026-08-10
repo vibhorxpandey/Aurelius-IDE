@@ -1181,6 +1181,8 @@
   background:
     radial-gradient(circle at 20% 20%, rgba(0, 120, 212, 0.08), transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(241, 76, 76, 0.06), transparent 40%),
+    linear-gradient(90deg, rgba(10, 10, 10, 0.55) 0%, rgba(10, 10, 10, 0.3) 45%, rgba(10, 10, 10, 0.75) 100%),
+    url("../assets/login-bg.jpg") center / cover no-repeat,
     var(--bg-shell);
 }
 

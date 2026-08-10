@@ -275,7 +275,10 @@ export default function App() {
     (d) => d.severity === 1 && ["AUR001", "AUR002", "AUR003", "AUR004"].includes(d.code)
   ).length;
   const gateBlocking = allDiagnostics.filter((d) => d.code === "AUR010").length;
-  const latexUri = tabs.find((t) => t.language === "latex")?.uri ?? activeUri;
+  // The active tab wins whenever it's itself a .tex file — otherwise this would silently
+  // target whichever .tex tab happened to be opened first, not the one on screen.
+  const latexUri =
+    activeTab?.language === "latex" ? activeTab.uri : (tabs.find((t) => t.language === "latex")?.uri ?? activeUri);
 
   // "Run" for a paper means one thing: a real pdflatex/Tectonic pass via the
   // `aurelius.compilePdf` command — see RunAndDebugPanel's docstring. The transcript that

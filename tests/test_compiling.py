@@ -14,7 +14,9 @@ from aurelius_ide.compiling import (
     CompileOutcome,
     DockerRunner,
     SubprocessRunner,
+    TectonicRunner,
     UnavailableRunner,
+    default_gate,
     parse_log,
 )
 from aurelius_ide.diagnostics import Code, Severity
@@ -34,14 +36,26 @@ class StubRunner:
 
     name = "stub"
 
-    def __init__(self, log: str = "", blg: str = "", returncode: int = 0, unavailable=None):
+    def __init__(
+        self,
+        log: str = "",
+        blg: str = "",
+        returncode: int = 0,
+        unavailable=None,
+        produce_pdf: bool = False,
+    ):
         self.outcome = CompileOutcome(
             log=log, blg=blg, returncode=returncode, unavailable=unavailable
         )
         self.calls = 0
+        # Simulates a successful build actually producing a PDF, the way a real
+        # SubprocessRunner/TectonicRunner would leave one in the workdir.
+        self.produce_pdf = produce_pdf
 
     def run(self, tex_path: Path, workdir: Path) -> CompileOutcome:
         self.calls += 1
+        if self.produce_pdf and not self.outcome.unavailable:
+            (workdir / (tex_path.stem + ".pdf")).write_bytes(b"%PDF-1.5\n%stub\n")
         return self.outcome
 
 
@@ -225,3 +239,141 @@ def test_docker_command_mounts_the_workdir_and_disables_networking(tmp_path):
     assert f"{tmp_path.resolve()}:/work" in command
     assert "texlive/texlive:TL2024" in command
     assert command[-1] == "paper.tex"
+
+
+# -- tectonic -----------------------------------------------------------------------------
+
+
+def test_tectonic_is_a_single_pass_not_four():
+    # Tectonic reruns itself until the aux file stabilises; DEFAULT_PASSES's four-step
+    # dance exists to force that behaviour out of pdflatex, which doesn't do it alone.
+    assert TectonicRunner().passes == ("tectonic",)
+
+
+def test_tectonic_command_has_no_pdflatex_only_flags():
+    command = TectonicRunner()._command("tectonic", "paper", Path("."))
+    assert command[0] == "tectonic"
+    assert command[-1] == "paper.tex"
+    assert "--keep-logs" in command
+    # These are pdflatex-specific and meaningless to Tectonic's CLI.
+    assert "-interaction=nonstopmode" not in command
+    assert "-file-line-error" not in command
+
+
+def test_tectonic_missing_binary_is_detected_without_running_anything():
+    runner = TectonicRunner(tectonic="definitely-not-a-real-binary")
+    outcome = runner.run(Path("paper.tex"), Path("."))
+    assert outcome.unavailable
+    assert outcome.commands == []
+
+
+def test_tectonic_uses_the_configured_executable_name():
+    runner = TectonicRunner(tectonic="my-tectonic")
+    assert runner._command("tectonic", "paper", Path("."))[0] == "my-tectonic"
+
+
+# -- pdf persistence ------------------------------------------------------------------------
+
+
+def test_compiled_pdf_is_copied_to_the_requested_output(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    pdf_output = tmp_path / "paper.pdf"
+
+    gate = CompileGate(runner=StubRunner(produce_pdf=True))
+    gate.check(tex, pdf_output=pdf_output)
+
+    assert pdf_output.is_file()
+    assert pdf_output.read_bytes().startswith(b"%PDF-1.5")
+
+
+def test_pdf_output_defaults_to_none_and_writes_nothing(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    CompileGate(runner=StubRunner(produce_pdf=True)).check(tex)
+    # No pdf_output was requested, so nothing should appear beside the source either —
+    # the scratch directory that actually held the PDF is still destroyed.
+    assert {p.name for p in tmp_path.iterdir()} == {"paper.tex"}
+
+
+def test_no_pdf_is_written_when_the_compile_produced_none(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    pdf_output = tmp_path / "paper.pdf"
+
+    # produce_pdf=False: a real failed compile that never got as far as xdvipdfmx.
+    gate = CompileGate(runner=StubRunner(log="! Emergency stop.\n", produce_pdf=False))
+    gate.check(tex, pdf_output=pdf_output)
+
+    assert not pdf_output.exists()
+
+
+def test_no_pdf_is_written_when_the_toolchain_is_unavailable(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    pdf_output = tmp_path / "paper.pdf"
+
+    gate = CompileGate(runner=StubRunner(unavailable="no toolchain", produce_pdf=True))
+    gate.check(tex, pdf_output=pdf_output)
+
+    # produce_pdf is ignored when the stub itself reports unavailable, matching what a
+    # real runner does: it never gets far enough to leave a PDF behind either.
+    assert not pdf_output.exists()
+
+
+def test_pdf_output_directory_is_created_if_missing(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    pdf_output = tmp_path / "build" / "nested" / "paper.pdf"
+
+    CompileGate(runner=StubRunner(produce_pdf=True)).check(tex, pdf_output=pdf_output)
+
+    assert pdf_output.is_file()
+
+
+# -- default_gate fallback chain ------------------------------------------------------------
+
+
+def test_default_gate_prefers_explicit_docker_image(monkeypatch):
+    monkeypatch.setenv("AURELIUS_LATEX_DOCKER_IMAGE", "texlive/texlive:TL2024")
+    gate = default_gate()
+    assert isinstance(gate.runner, DockerRunner)
+    assert gate.runner.image == "texlive/texlive:TL2024"
+
+
+def test_default_gate_honours_explicit_latex_override(monkeypatch):
+    monkeypatch.delenv("AURELIUS_LATEX_DOCKER_IMAGE", raising=False)
+    monkeypatch.setenv("AURELIUS_LATEX", "/opt/custom/pdflatex")
+    gate = default_gate()
+    assert isinstance(gate.runner, SubprocessRunner)
+    assert not isinstance(gate.runner, TectonicRunner)
+    assert gate.runner.latex == "/opt/custom/pdflatex"
+
+
+def test_default_gate_falls_back_to_tectonic_when_pdflatex_is_absent(monkeypatch):
+    monkeypatch.delenv("AURELIUS_LATEX_DOCKER_IMAGE", raising=False)
+    monkeypatch.delenv("AURELIUS_LATEX", raising=False)
+    monkeypatch.delenv("AURELIUS_TECTONIC", raising=False)
+
+    import shutil as shutil_module
+
+    def fake_which(name):
+        return "/usr/bin/tectonic" if name == "tectonic" else None
+
+    monkeypatch.setattr(shutil_module, "which", fake_which)
+    gate = default_gate()
+    assert isinstance(gate.runner, TectonicRunner)
+
+
+def test_default_gate_reports_both_options_when_nothing_is_found(monkeypatch):
+    monkeypatch.delenv("AURELIUS_LATEX_DOCKER_IMAGE", raising=False)
+    monkeypatch.delenv("AURELIUS_LATEX", raising=False)
+    monkeypatch.delenv("AURELIUS_TECTONIC", raising=False)
+
+    import shutil as shutil_module
+
+    monkeypatch.setattr(shutil_module, "which", lambda name: None)
+    gate = default_gate()
+    assert isinstance(gate.runner, UnavailableRunner)
+    assert "Tectonic" in gate.runner.reason
+    assert "TeX Live" in gate.runner.reason

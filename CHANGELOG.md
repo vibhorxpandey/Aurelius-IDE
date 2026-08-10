@@ -29,6 +29,44 @@ rename is a breaking change even though nothing fails to compile.
 
 ## [Unreleased]
 
+## [0.3.2] — unreleased
+
+### Fixed
+
+- **All four panel commands, and the new `compilePdf`, silently misread their arguments —
+  every real client call to them failed or crashed.** pygls's `workspace/executeCommand`
+  dispatcher inspects a `@server.command` handler's own signature and unpacks the client's
+  JSON `arguments` array *positionally, one element per declared parameter* (after the
+  injected `ls`). Every handler here was written as `def handler(ls, args)` and then did
+  `uri = args[0]` — but for a one-argument call, pygls had already consumed that single
+  array element to fill the lone `args` parameter, so `args` was bound to the URI *string
+  itself* and `args[0]` was its first character. `bibliographyStatus`, `submissionGate`,
+  `compileGate` all returned `"Only file:// documents can be compiled"` for a perfectly
+  valid URI; `searchLiterature`, which expects two arguments, raised `TypeError` outright,
+  since pygls's own leftover-argument check rejects a call that didn't consume the whole
+  array.
+
+  Fixed by declaring each handler's real parameters (`uri`, or `query` and `limit`) instead
+  of a generic `args` list indexed by hand. `tests/test_command_dispatch.py` closes the gap
+  that let this go undetected: every earlier test called these functions directly as plain
+  Python, which bypasses pygls's dispatch entirely and cannot see this class of bug. The new
+  tests drive the same argument-unpacking pygls itself runs. Found and confirmed via a full
+  protocol-level run against the real server — all five commands now verified working
+  end-to-end, including a real compiled PDF and real OpenAlex search results.
+
+### Added
+
+- **`aurelius.compilePdf`** — compiles the paper and persists the resulting PDF next to the
+  source (`<stem>.pdf`, the same place `pdflatex` itself would put it), for panels that need
+  a real, addressable file rather than a verdict about a scratch directory that no longer
+  exists by the time the response arrives. `CompileGate.check()` gained a `pdf_output`
+  parameter to support this; existing callers are unaffected (default `None`, unchanged
+  behaviour).
+- **`TectonicRunner`** — a `CompileRunner` for [Tectonic](https://tectonic-typesetting.github.io),
+  a single self-contained binary that resolves its own TeX packages on demand instead of
+  needing a multi-gigabyte TeX Live install. `default_gate()` now falls back to it
+  automatically when `pdflatex` isn't on `PATH`; override with `AURELIUS_TECTONIC`.
+
 ## [0.3.1] — unreleased
 
 ### Fixed
@@ -107,6 +145,7 @@ Carried deliberately into this release; see
   inherit the shell `PATH`.
 - `_probe_network` imports `httpx`, which is not a declared dependency.
 
-[Unreleased]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/vibhorxpandey/Aurelius-IDE/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/vibhorxpandey/Aurelius-IDE/releases/tag/v0.3.0

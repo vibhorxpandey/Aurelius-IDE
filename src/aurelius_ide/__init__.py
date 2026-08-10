@@ -15,7 +15,14 @@ installs via the ``lsp`` extra.
         print(d.severity.name, d.code, d.message)
 """
 from .cache import ResultCache
-from .compiling import CompileGate, CompileRunner, DockerRunner, SubprocessRunner, default_gate
+from .compiling import (
+    CompileGate,
+    CompileRunner,
+    DockerRunner,
+    SubprocessRunner,
+    TectonicRunner,
+    default_gate,
+)
 from .diagnostics import Code, Diagnostic, Severity
 from .document import BibEntry, CiteKeyRef, Position, Range, ResearchDocument
 from .engine import AnalysisEngine
@@ -37,7 +44,7 @@ from .verification import (
 #: The canonical version for the whole project. `pyproject.toml` reads this via hatchling,
 #: `lsp.py` imports it, and `scripts/sync_version.py` propagates it to the extension
 #: manifest and the release manifest. Change it here and nowhere else.
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     "__version__",
@@ -61,6 +68,7 @@ __all__ = [
     "CompileRunner",
     "SubprocessRunner",
     "DockerRunner",
+    "TectonicRunner",
     "default_gate",
     "Searcher",
     "OpenAlexSearcher",

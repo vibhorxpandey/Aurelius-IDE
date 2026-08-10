@@ -1,6 +1,6 @@
 {
-  "version": "0.3.1",
-  "tests": 181,
+  "version": "0.3.2",
+  "tests": 198,
   "indexes": [
     "OpenAlex",
     "Crossref",

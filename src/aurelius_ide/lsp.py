@@ -392,19 +392,32 @@ def _line_char(text: str, offset: int) -> tuple[int, int]:
 # --------------------------------------------------------------------------------------
 # Compile gate — an explicit command, never part of the keystroke path
 # --------------------------------------------------------------------------------------
+#
+# Every ``@server.command`` handler below takes its real parameters by name — ``uri``,
+# ``query``, ``limit`` — rather than a single catch-all ``args`` list indexed by hand.
+# That is not a style preference: pygls's ``workspace/executeCommand`` dispatcher inspects
+# the handler's own signature and unpacks the client's JSON ``arguments`` array
+# positionally, one element per declared parameter (after the injected ``ls``). A handler
+# declared as ``def handler(ls, args)`` does not receive the array — pygls has already
+# consumed its first (and, for a one-argument call, only) element to fill that single
+# ``args`` slot. Every one of these five commands originally got this wrong, silently:
+# ``uri = args[0]`` was indexing the *first character of the URI string*, and every real
+# caller sending ``arguments: [uri]`` received "Only file:// documents can be compiled."
+# for a perfectly valid URI. Nothing in the test suite caught it, because nothing had ever
+# driven a command through pygls's actual dispatcher rather than calling the Python
+# function directly — see ``tests/test_command_dispatch.py``, added once this surfaced.
 
 COMPILE_GATE_COMMAND = "aurelius.compileGate"
 
 
 @server.command(COMPILE_GATE_COMMAND)
-def compile_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
+def compile_gate(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str, object]:
     """Run ``pdflatex``/``bibtex`` over a paper and publish what the toolchain said.
 
     Exposed as a command rather than an analyzer because a compile costs seconds and
     writes artefacts — running it on every keystroke would be both useless and hostile.
     The author asks for it at the moment they care, which is just before submitting.
     """
-    uri = args[0] if args else None
     if not uri:
         return {"ok": False, "reason": "No document URI supplied."}
 
@@ -431,6 +444,61 @@ def compile_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
     return {"ok": True, "diagnostics": len(diags)}
 
 
+COMPILE_PDF_COMMAND = "aurelius.compilePdf"
+
+
+@server.command(COMPILE_PDF_COMMAND)
+def compile_pdf(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str, object]:
+    """Compile the paper and persist the resulting PDF next to the source.
+
+    A sibling to ``compileGate`` rather than a parameter added to it: that command's
+    contract is "diagnostics about whether it built", and every existing caller expects
+    exactly that response shape. This one exists for a different consumer — a PDF preview
+    panel — that needs a real, addressable file. ``CompileGate.check`` always builds in a
+    scratch directory it deletes before returning, so without ``pdf_output`` there would be
+    nothing left on disk to point a viewer at by the time this function's caller sees the
+    response.
+
+    The PDF lands beside the ``.tex`` file as ``<stem>.pdf`` — the same place ``pdflatex``
+    itself would put it without ``-output-directory`` — so it is exactly where an author
+    already expects to find their compiled paper.
+    """
+    if not uri:
+        return {"ok": False, "reason": "No document URI supplied."}
+
+    path = _uri_to_path(uri)
+    if path is None:
+        return {"ok": False, "reason": "Only file:// documents can be compiled."}
+
+    try:
+        source = ls.workspace.get_text_document(uri).source
+    except KeyError:
+        source = None
+
+    bib_uri = ls.bib_for.get(uri)
+    bib_path = _uri_to_path(bib_uri) if bib_uri else None
+
+    gate = default_gate()
+    if not gate.available():
+        # Same rule as an unreachable index: say we could not check, never imply failure.
+        return {"ok": False, "reason": "No LaTeX toolchain available."}
+
+    pdf_output = path.with_suffix(".pdf")
+    diags = gate.check(path, bib_path=bib_path, source=source, pdf_output=pdf_output)
+    instant = ls.engine.diagnostics(uri)
+    ls.publish_split(uri, instant + diags, 0)
+
+    errors = [d for d in diags if d.code == Code.COMPILE_ERROR]
+    produced = pdf_output.is_file()
+    return {
+        "ok": True,
+        "pdfPath": str(pdf_output) if produced else None,
+        "pdfUri": _path_to_uri(pdf_output) if produced else None,
+        "diagnostics": len(diags),
+        "errors": len(errors),
+    }
+
+
 # --------------------------------------------------------------------------------------
 # Panel commands — structured state for the editor UI
 # --------------------------------------------------------------------------------------
@@ -455,14 +523,17 @@ _VERDICT_ICON = {
 
 
 @server.command(BIBLIOGRAPHY_COMMAND)
-def bibliography_status(ls: AureliusLanguageServer, args) -> dict[str, object]:
+def bibliography_status(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str, object]:
     """Every bibliography entry, with its cached verdict and where it is cited.
 
     Reads only what the engine already holds. An entry whose verification has not landed
     yet reports ``unchecked`` rather than a guess — the same rule as invariant 4, applied
     to a panel instead of a squiggle.
+
+    Takes ``uri`` as its own named parameter, not a generic ``args`` list indexed by hand
+    — see the comment above ``COMPILE_GATE_COMMAND`` for why that distinction is
+    load-bearing rather than cosmetic.
     """
-    uri = args[0] if args else None
     document = ls.engine.document(uri) if uri else None
     if document is None:
         return {"ok": False, "reason": "No analysed document for that URI.", "entries": []}
@@ -511,15 +582,15 @@ def _tally(entries: list[dict[str, object]]) -> dict[str, int]:
 
 
 @server.command(SEARCH_COMMAND)
-def search_literature(ls: AureliusLanguageServer, args) -> dict[str, object]:
+def search_literature(
+    ls: AureliusLanguageServer, query: str = "", limit: int = 8
+) -> dict[str, object]:
     """Search scholarly indexes and return insertable BibTeX for each hit.
 
     Failure returns ``ok: False`` with a reason rather than an empty result list, so the
     editor can say "search is unreachable" instead of the far more alarming "no such
     paper exists" — the same distinction the verifier draws.
     """
-    query = args[0] if args else ""
-    limit = int(args[1]) if len(args) > 1 else 8
     if not str(query).strip():
         return {"ok": True, "results": []}
 
@@ -535,14 +606,13 @@ def search_literature(ls: AureliusLanguageServer, args) -> dict[str, object]:
 
 
 @server.command(SUBMISSION_GATE_COMMAND)
-def submission_gate(ls: AureliusLanguageServer, args) -> dict[str, object]:
+def submission_gate(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str, object]:
     """Everything that must hold before a paper is submitted, as a pass/fail checklist.
 
     Combines the live analysis with a real compile. Each check reports ``pass``, ``fail``
     or ``skip`` — never a silent success — because a gate that cannot run a check must say
     so rather than let it read as satisfied.
     """
-    uri = args[0] if args else None
     if not uri:
         return {"ok": False, "reason": "No document URI supplied."}
 

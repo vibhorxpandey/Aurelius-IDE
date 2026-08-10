@@ -182,6 +182,32 @@ class DockerRunner(SubprocessRunner):
         return super().run(tex_path, workdir)
 
 
+class TectonicRunner(SubprocessRunner):
+    """Runs Tectonic — a single self-contained binary that resolves its own TeX packages
+    on demand and needs no separate TeX Live install.
+
+    A distinct class rather than a flag on :class:`SubprocessRunner`, because its pass
+    structure is fundamentally different: one command, not four. Tectonic's own
+    rerun-until-the-aux-file-stabilises logic already does what ``DEFAULT_PASSES`` exists
+    to force by hand, and it folds bibtex in automatically when the source calls for it.
+
+    This is what makes a *desktop* compile gate practical: a full TeX Live install is
+    multiple gigabytes, while Tectonic is one ~50 MB binary that fetches only the packages
+    a given document actually uses, on first use, then caches them.
+    """
+
+    name = "tectonic"
+
+    def __init__(self, tectonic: str = "tectonic", timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
+        super().__init__(latex=tectonic, timeout=timeout, passes=("tectonic",))
+
+    def _command(self, step: str, stem: str, workdir: Path) -> list[str]:
+        # --keep-logs: without it Tectonic deletes the .log on success, and parse_log
+        # needs it to report the same "labels changed, rerun" style warnings the
+        # pdflatex path reports.
+        return [self.latex, "--keep-logs", stem + ".tex"]
+
+
 class UnavailableRunner:
     """Stands in when no toolchain is configured. Always inconclusive, never a finding."""
 
@@ -260,15 +286,22 @@ class CompileGate:
         tex_path: Path,
         bib_path: Path | None = None,
         source: str | None = None,
+        pdf_output: Path | None = None,
     ) -> list[Diagnostic]:
         """Compile ``tex_path`` and return diagnostics anchored in it.
 
         ``source`` overrides the file's contents, so an editor can gate on the unsaved
         buffer rather than on what is last written to disk.
+
+        ``pdf_output``, if given, receives a copy of the compiled PDF when the build
+        produces one. The scratch build directory is destroyed before this method
+        returns — same as always — so this is the only way a caller gets the actual PDF
+        bytes rather than just a verdict about them. Nothing is written if the build
+        produced no PDF, so a failed compile never leaves a stale one in place silently.
         """
         tex_path = Path(tex_path)
         text = source if source is not None else _read(tex_path)
-        outcome = self._compile(tex_path, bib_path, text)
+        outcome = self._compile(tex_path, bib_path, text, pdf_output=pdf_output)
 
         # A toolchain we could not run tells us nothing about the paper. Reporting that
         # as a compile failure is the same error as reporting a dropped connection as a
@@ -281,7 +314,13 @@ class CompileGate:
     def available(self) -> bool:
         return bool(getattr(self.runner, "available", True))
 
-    def _compile(self, tex_path: Path, bib_path: Path | None, text: str) -> CompileOutcome:
+    def _compile(
+        self,
+        tex_path: Path,
+        bib_path: Path | None,
+        text: str,
+        pdf_output: Path | None = None,
+    ) -> CompileOutcome:
         """Build in a scratch directory so the author's folder stays free of artefacts."""
         parent = tempfile.mkdtemp(prefix="aurelius-compile-")
         workdir = Path(parent)
@@ -291,7 +330,13 @@ class CompileGate:
             _stage_siblings(tex_path, workdir, skip=tex_path.name)
             if bib_path and Path(bib_path).is_file():
                 shutil.copy2(bib_path, workdir / Path(bib_path).name)
-            return self.runner.run(staged, workdir)
+            outcome = self.runner.run(staged, workdir)
+            if pdf_output is not None and not outcome.unavailable:
+                produced = workdir / (tex_path.stem + ".pdf")
+                if produced.is_file():
+                    pdf_output.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(produced, pdf_output)
+            return outcome
         except OSError as exc:
             return CompileOutcome(unavailable=f"Could not stage the build: {exc}")
         finally:
@@ -440,14 +485,39 @@ def _find_line(text: str, key: str) -> int | None:
 
 
 def default_gate() -> CompileGate:
-    """A gate honouring ``AURELIUS_LATEX_DOCKER_IMAGE`` / ``AURELIUS_LATEX``.
+    """A gate honouring ``AURELIUS_LATEX_DOCKER_IMAGE`` / ``AURELIUS_LATEX`` /
+    ``AURELIUS_TECTONIC``.
 
     Environment-driven rather than argument-driven because the thing that varies is the
     machine, not the call site: the same CI config should work on a runner with TeX Live
-    installed and on one that only has Docker.
+    installed, one with only Docker, and a bare desktop machine with neither.
+
+    Order: a configured Docker image, an explicit ``AURELIUS_LATEX`` override, ``pdflatex``
+    on PATH, then Tectonic. Tectonic is checked last among the automatic options — not
+    because it is worse, but because ``parse_log``'s patterns were tuned against
+    ``-file-line-error`` output, and an install that already has ``pdflatex`` should keep
+    using the engine those patterns were written for.
     """
     image = os.environ.get("AURELIUS_LATEX_DOCKER_IMAGE")
     if image:
         return CompileGate(runner=DockerRunner(image=image))
-    runner = SubprocessRunner(latex=os.environ.get("AURELIUS_LATEX", "pdflatex"))
-    return CompileGate(runner=runner if runner.available else UnavailableRunner())
+
+    explicit_latex = os.environ.get("AURELIUS_LATEX")
+    if explicit_latex:
+        return CompileGate(runner=SubprocessRunner(latex=explicit_latex))
+
+    pdflatex = SubprocessRunner(latex="pdflatex")
+    if pdflatex.available:
+        return CompileGate(runner=pdflatex)
+
+    tectonic = TectonicRunner(tectonic=os.environ.get("AURELIUS_TECTONIC", "tectonic"))
+    if tectonic.available:
+        return CompileGate(runner=tectonic)
+
+    return CompileGate(
+        runner=UnavailableRunner(
+            "No LaTeX toolchain found. Install a TeX distribution (TeX Live, MiKTeX) or "
+            "Tectonic (tectonic-typesetting.github.io), or set AURELIUS_LATEX / "
+            "AURELIUS_TECTONIC to the executable's path."
+        )
+    )

@@ -44,7 +44,7 @@ from .verification import (
 #: The canonical version for the whole project. `pyproject.toml` reads this via hatchling,
 #: `lsp.py` imports it, and `scripts/sync_version.py` propagates it to the extension
 #: manifest and the release manifest. Change it here and nowhere else.
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 __all__ = [
     "__version__",

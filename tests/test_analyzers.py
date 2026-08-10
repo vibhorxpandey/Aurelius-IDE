@@ -128,6 +128,46 @@ def test_uncited_entries_are_not_verified():
     assert stub.calls == 1
 
 
+def test_set_progress_reports_checking_then_hit_for_a_cache_miss():
+    stub = StubVerifier(verdict=VerdictKind.VERIFIED.value)
+    analyzer = ScholarlyVerificationAnalyzer(cache=ResultCache(persist=False), verifier=stub)
+    events: list[tuple[str, str, str]] = []
+    analyzer.set_progress(lambda key, source, status: events.append((key, source, status)))
+
+    analyzer.run(make_doc(r"\begin{document}\citep{smith2020}\end{document}"))
+
+    assert events == [
+        ("smith2020", "stub_source", "checking"),
+        ("smith2020", "stub_source", "hit"),
+    ]
+
+
+def test_a_cache_hit_reports_no_progress_steps():
+    """Nothing was actually queried, so showing a fake cascade would misrepresent it."""
+    cache = ResultCache(persist=False)
+    stub = StubVerifier(verdict=VerdictKind.VERIFIED.value)
+    analyzer = ScholarlyVerificationAnalyzer(cache=cache, verifier=stub)
+    analyzer.run(make_doc(r"\begin{document}\citep{smith2020}\end{document}"))  # warms the cache
+
+    events: list[tuple[str, str, str]] = []
+    analyzer.set_progress(lambda key, source, status: events.append((key, source, status)))
+    analyzer.run(make_doc(r"\begin{document}\citep{smith2020}\end{document}"))
+
+    assert events == []
+
+
+def test_set_progress_none_silences_further_events():
+    stub = StubVerifier(verdict=VerdictKind.VERIFIED.value)
+    analyzer = ScholarlyVerificationAnalyzer(cache=ResultCache(persist=False), verifier=stub)
+    events: list[tuple[str, str, str]] = []
+    analyzer.set_progress(lambda key, source, status: events.append((key, source, status)))
+    analyzer.set_progress(None)
+
+    analyzer.run(make_doc(r"\begin{document}\citep{smith2020}\end{document}"))
+
+    assert events == []
+
+
 def test_verifier_exceptions_do_not_propagate():
     class Exploding:
         name = "exploding"

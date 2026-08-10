@@ -24,8 +24,15 @@ exists so transport failure stays silent.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
+
+#: ``(source, status)`` — ``source`` is one of the real index names ("openalex",
+#: "crossref", "arxiv", "semantic_scholar", "web_fallback"); ``status`` is "checking",
+#: then "hit" or "miss". A source that the cascade never reaches (an earlier one already
+#: matched) is simply never called — there is no synthetic "skipped" status.
+ProgressCallback = Callable[[str, str], None]
 
 
 class VerdictKind(str, Enum):
@@ -52,12 +59,16 @@ class Verifier(Protocol):
 
     name: str
 
-    def verify(self, citation: str) -> dict[str, Any]:
+    def verify(self, citation: str, on_step: ProgressCallback | None = None) -> dict[str, Any]:
         """Return a verdict dict.
 
         Required keys: ``ok`` (bool), ``verdict`` (:class:`VerdictKind` value).
         Optional: ``confidence``, ``notes``, ``matched_work``, ``author_match``,
         ``corrected_citation``, ``bibtex``.
+
+        ``on_step``, if given, is called as each scholarly index is actually queried.
+        Implementations that cannot report progress (e.g. :class:`NullVerifier`) just
+        ignore it.
         """
         ...
 
@@ -72,7 +83,7 @@ class NullVerifier:
 
     name = "null"
 
-    def verify(self, citation: str) -> dict[str, Any]:
+    def verify(self, citation: str, on_step: ProgressCallback | None = None) -> dict[str, Any]:
         return {
             "ok": False,
             "verdict": VerdictKind.ERROR.value,
@@ -145,13 +156,19 @@ class AureliusVerifier:
             self._offline = True
         return not self._offline
 
-    def verify(self, citation: str) -> dict[str, Any]:
+    def verify(self, citation: str, on_step: ProgressCallback | None = None) -> dict[str, Any]:
         fn = self._load()
         if fn is None:
-            return NullVerifier().verify(citation)
+            return NullVerifier().verify(citation, on_step)
 
         try:
-            result = fn(citation, max_results=self.max_results)
+            try:
+                result = fn(citation, max_results=self.max_results, on_step=on_step)
+            except TypeError:
+                # An older aurelius-mcp than the pinned >=0.7.0 minimum has no on_step
+                # parameter. Degrade to silent progress rather than crash verification
+                # over a UI-only feature.
+                result = fn(citation, max_results=self.max_results)
         except Exception as exc:
             # Every exception is ERROR, transport or not: a backend that raised did not
             # tell us the work is missing, so per invariant 4 we stay silent either way.

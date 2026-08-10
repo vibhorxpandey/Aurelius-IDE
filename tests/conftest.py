@@ -57,10 +57,14 @@ class StubVerifier:
         self.delay = delay
         self.calls = 0
 
-    def verify(self, citation: str) -> dict[str, Any]:
+    def verify(self, citation: str, on_step=None) -> dict[str, Any]:
         self.calls += 1
+        if on_step:
+            on_step("stub_source", "checking")
         if self.delay:
             time.sleep(self.delay)
+        if on_step:
+            on_step("stub_source", "miss" if self.verdict == VerdictKind.ERROR.value else "hit")
         return {
             "ok": self.verdict != VerdictKind.ERROR.value,
             "verdict": self.verdict,

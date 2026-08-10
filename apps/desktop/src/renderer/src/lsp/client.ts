@@ -14,14 +14,28 @@ import type {
 } from "@shared/lsp-types";
 import { getApi } from "../platform";
 
+/**
+ * One real step of the OpenAlex -> Crossref -> arXiv -> Semantic Scholar cascade,
+ * pushed the moment `aurelius_ide.engine` fires it — see `lsp.py::_publish_progress`.
+ * `status` is "checking" while the request is in flight, then "hit" or "miss".
+ */
+export interface VerificationProgressEvent {
+  uri: string;
+  key: string;
+  source: string;
+  status: "checking" | "hit" | "miss";
+}
+
 type DiagnosticsListener = (uri: string, diagnostics: LspDiagnostic[]) => void;
 type StatusListener = (status: ServerStatus) => void;
+type ProgressListener = (step: VerificationProgressEvent) => void;
 
 export class LspClient {
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private diagnosticsListeners = new Set<DiagnosticsListener>();
   private statusListeners = new Set<StatusListener>();
+  private progressListeners = new Set<ProgressListener>();
   private latestDiagnostics = new Map<string, LspDiagnostic[]>();
   private initialized: Promise<void> | null = null;
   private unsubscribeMessage: () => void;
@@ -54,6 +68,13 @@ export class LspClient {
     this.diagnosticsListeners.add(listener);
     for (const [uri, diags] of this.latestDiagnostics) listener(uri, diags);
     return () => this.diagnosticsListeners.delete(listener);
+  }
+
+  /** Fire-and-forget: a client that never calls this loses nothing, same as the server
+   * side treats it — see the docstring on `_publish_progress` in `lsp.py`. */
+  onProgress(listener: ProgressListener): () => void {
+    this.progressListeners.add(listener);
+    return () => this.progressListeners.delete(listener);
   }
 
   diagnosticsFor(uri: string): LspDiagnostic[] {
@@ -170,6 +191,11 @@ export class LspClient {
       const params = message.params as PublishDiagnosticsParams;
       this.latestDiagnostics.set(params.uri, params.diagnostics);
       this.diagnosticsListeners.forEach((l) => l(params.uri, params.diagnostics));
+      return;
+    }
+    if (message.method === "aurelius/verificationProgress") {
+      const step = message.params as VerificationProgressEvent;
+      this.progressListeners.forEach((l) => l(step));
     }
   }
 

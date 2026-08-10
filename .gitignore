@@ -13,6 +13,9 @@ node_modules/
 editors/vscode/out/
 apps/desktop/out/
 apps/desktop/demo-workspace/*.pdf
+apps/desktop/release/
+apps/desktop/build-tools/
+apps/desktop/resources/python-embed/
 *.tsbuildinfo
 *.vsix
 .DS_Store

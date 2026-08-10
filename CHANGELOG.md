@@ -29,6 +29,29 @@ rename is a breaking change even though nothing fails to compile.
 
 ## [Unreleased]
 
+## [0.4.0] — unreleased
+
+### Added
+
+- **Live, per-source verification progress.** `AnalysisEngine` takes an `on_progress`
+  callback — `(uri, key, source, status)`, fired as each citation is actually checked
+  against OpenAlex, Crossref, arXiv, and Semantic Scholar in that real cascade order (the
+  same order `aurelius-mcp`'s `verify_citation` uses internally, now exposed via its new
+  `on_step` parameter — `aurelius-mcp>=0.7.0`). `status` is `"checking"`, then `"hit"` or
+  `"miss"`; a source the cascade never reaches because an earlier one already matched is
+  simply never reported. A cache hit reports nothing at all — nothing was actually queried,
+  and staging a fake cascade for an instant result would contradict the reason this
+  project reports `ERROR` instead of guessing (invariant 4). Version-guarded like every
+  other network result: a step from a pass superseded by a newer edit is dropped rather
+  than painted over text that no longer exists.
+- **`aurelius/verificationProgress` notification.** `lsp.py` forwards `on_progress` over
+  the wire as a fire-and-forget custom notification (not `$/progress` — that protocol's
+  per-token `create` handshake is more ceremony than a UI ping needs). Not part of the
+  four-command panel contract: a client that ignores it loses nothing.
+- `ScholarlyVerificationAnalyzer.set_progress(callback)` — thread-local, because the
+  engine runs each open document's network pass on its own `threading.Timer` thread, and
+  a shared attribute would let one document's progress bleed into another's.
+
 ## [0.3.2] — unreleased
 
 ### Fixed

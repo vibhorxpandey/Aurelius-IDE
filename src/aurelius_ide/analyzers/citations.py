@@ -17,12 +17,20 @@ hallucinated reference — which is why it is the reason this project exists.
 """
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from typing import Any
 
 from ..cache import ResultCache
 from ..diagnostics import Code, Diagnostic, Severity
 from ..document import BibEntry, ResearchDocument
-from ..verification import INCONCLUSIVE, VerdictKind, Verifier, get_default_verifier
+from ..verification import (
+    INCONCLUSIVE,
+    ProgressCallback,
+    VerdictKind,
+    Verifier,
+    get_default_verifier,
+)
 from .base import BaseAnalyzer
 
 # Fields BibTeX itself will complain about, by entry type.
@@ -136,24 +144,46 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
     ) -> None:
         self.cache = cache or ResultCache()
         self.verifier = verifier or get_default_verifier()
+        # Thread-local, not a plain attribute: the engine runs each open document's
+        # network pass on its own threading.Timer thread, and a shared attribute here
+        # would let one document's live progress events bleed into another's.
+        self._progress = threading.local()
 
-    def _fetch(self, citation: str) -> dict[str, Any]:
+    def set_progress(self, callback: Callable[[str, str, str], None] | None) -> None:
+        """Install a per-thread sink for live verification progress.
+
+        Called ``callback(key, source, status)`` as each scholarly index is actually
+        queried for the citation ``key`` — see :data:`ProgressCallback` in
+        ``verification.py`` for what ``source``/``status`` mean. The engine wires this up
+        before calling :meth:`run`; duck-typed (``hasattr``) rather than part of the
+        :class:`Analyzer` contract, because no other analyzer has anything to report.
+        """
+        self._progress.callback = callback
+
+    def _fetch(self, citation: str, on_step: ProgressCallback | None = None) -> dict[str, Any]:
         """The single network call. Overridden in tests to keep them hermetic.
 
         Kept separate from :meth:`verify_entry` so that cache policy and transport can be
         tested independently — a stub that replaced the cached method would silently make
         the cache untested.
         """
-        return self.verifier.verify(citation)
+        return self.verifier.verify(citation, on_step=on_step)
 
-    def verify_entry(self, entry: BibEntry) -> dict[str, Any]:
-        """Cached single-entry verification. Public so the engine can warm entries."""
+    def verify_entry(
+        self, entry: BibEntry, on_step: ProgressCallback | None = None
+    ) -> dict[str, Any]:
+        """Cached single-entry verification. Public so the engine can warm entries.
+
+        A cache hit reports no progress steps: nothing was actually queried, and showing
+        a fake cascade for a citation that resolved instantly would be exactly the kind
+        of staged result this project refuses to produce elsewhere.
+        """
         h = entry.content_hash()
         hit = self.cache.get(self.name, h)
         if hit is not None:
             return hit
         try:
-            result = self._fetch(entry.as_citation_string())
+            result = self._fetch(entry.as_citation_string(), on_step=on_step)
         except Exception as exc:  # network/parse failures must never kill the analyzer
             return {"ok": False, "verdict": "error", "notes": str(exc)[:200]}
         self.cache.set(self.name, h, result)
@@ -163,12 +193,18 @@ class ScholarlyVerificationAnalyzer(BaseAnalyzer):
         out: list[Diagnostic] = []
         cited = {r.key for r in doc.cite_refs}
         verdicts: dict[str, dict[str, Any]] = {}
+        progress = getattr(self._progress, "callback", None)
 
         for key in cited:
             entry = doc.bib_entries.get(key)
             if entry is None:
                 continue  # UndefinedCitationAnalyzer already reported this
-            verdicts[key] = self.verify_entry(entry)
+            on_step = (
+                (lambda source, status, _key=key: progress(_key, source, status))
+                if progress is not None
+                else None
+            )
+            verdicts[key] = self.verify_entry(entry, on_step=on_step)
 
         for ref in doc.cite_refs:
             result = verdicts.get(ref.key)

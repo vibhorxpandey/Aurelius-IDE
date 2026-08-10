@@ -42,6 +42,12 @@ DEFAULT_DEBOUNCE_MS = 700
 PublishCallback = Callable[[str, list[Diagnostic], int], None]
 """``(uri, diagnostics, version)`` — how the engine hands results to a client."""
 
+ProgressCallback = Callable[[str, str, str, str], None]
+"""``(uri, key, source, status)`` — a citation ``key`` was just checked against index
+``source``; ``status`` is ``"checking"``, ``"hit"``, or ``"miss"``. Fired live, during the
+network pass, not batched with the final diagnostics — see
+:meth:`AnalysisEngine._emit_progress`."""
+
 
 @dataclass
 class EngineStats:
@@ -98,10 +104,12 @@ class AnalysisEngine:
         cache: ResultCache | None = None,
         debounce_ms: int = DEFAULT_DEBOUNCE_MS,
         publish: PublishCallback | None = None,
+        on_progress: ProgressCallback | None = None,
     ) -> None:
         self.cache = cache or ResultCache()
         self.debounce_ms = debounce_ms
         self.publish = publish
+        self.on_progress = on_progress
         self.stats = EngineStats()
         self._docs: dict[str, _DocEntry] = {}
         self._lock = threading.RLock()
@@ -222,6 +230,21 @@ class AnalysisEngine:
             entry.timer = timer
         timer.start()
 
+    def _emit_progress(self, uri: str, version: int, key: str, source: str, status: str) -> None:
+        """Forward a live verification step, dropped if the document has since moved on.
+
+        Same stale-result concern as the diagnostics themselves (invariant 6): without
+        this check, a slow step from a superseded pass could paint "checking OpenAlex..."
+        over text the author has already edited past.
+        """
+        if not self.on_progress:
+            return
+        with self._lock:
+            entry = self._docs.get(uri)
+            if entry is None or entry.doc.version != version:
+                return
+        self.on_progress(uri, key, source, status)
+
     def _network_pass(self, uri: str, version: int) -> None:
         with self._lock:
             entry = self._docs.get(uri)
@@ -230,7 +253,23 @@ class AnalysisEngine:
                 return
             doc = entry.doc
 
+        progress_analyzers = [
+            a
+            for a in self.analyzers
+            if getattr(a, "is_network", False) and hasattr(a, "set_progress")
+        ]
+        if self.on_progress:
+            for analyzer in progress_analyzers:
+                analyzer.set_progress(
+                    lambda key, source, status, _uri=uri, _version=version: self._emit_progress(
+                        _uri, _version, key, source, status
+                    )
+                )
+
         diags = self._run_pass(doc, network=True)
+
+        for analyzer in progress_analyzers:
+            analyzer.set_progress(None)
 
         with self._lock:
             entry = self._docs.get(uri)

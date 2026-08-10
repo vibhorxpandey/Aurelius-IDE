@@ -9,10 +9,28 @@
  * only on this side of it.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import type { BrowserWindow } from "electron";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { app, type BrowserWindow } from "electron";
 import type { JsonRpcMessage, ServerStatus } from "../shared/lsp-types";
 
-const CANDIDATE_PYTHONS = ["python", "python3", "py"];
+/**
+ * A packaged build ships its own interpreter — see `scripts/bundle-python.mjs` — so a
+ * user with no Python installed at all can still run the app. It goes first: a stray
+ * system Python missing `aurelius_ide` would otherwise "succeed" at spawning and then
+ * fail the module import, wasting the one attempt a bundled interpreter would have won.
+ */
+function bundledPython(): string | null {
+  if (!app.isPackaged) return null;
+  const candidate = join(process.resourcesPath, "python-embed", "python.exe");
+  return existsSync(candidate) ? candidate : null;
+}
+
+function candidatePythons(): string[] {
+  const bundled = bundledPython();
+  const systemCandidates = ["python", "python3", "py"];
+  return bundled ? [bundled, ...systemCandidates] : systemCandidates;
+}
 
 export class LspServerProcess {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -26,7 +44,7 @@ export class LspServerProcess {
   async start(): Promise<void> {
     this.report({ state: "starting", detail: "Locating a Python interpreter…" });
 
-    for (const python of CANDIDATE_PYTHONS) {
+    for (const python of candidatePythons()) {
       const ok = await this.tryPython(python);
       if (ok) return;
     }

@@ -208,6 +208,17 @@ const CATALOGUE_SOURCE: Array<[string, string, string, string, ExtensionCategory
   ["ai-figure-caption", "Figure Caption Assistant", "Community", "Suggests a caption from a figure's filename and surrounding text.", "AI & Automation", "340K", 3.7, C.ai],
   ["ai-consistency-check", "Terminology Consistency Check", "Community", "Flags a term used inconsistently across sections.", "AI & Automation", "410K", 4.0, C.ai],
   ["ai-plain-summary", "Plain-Language Summary", "Community", "Generates a lay summary for broader-impact statements.", "AI & Automation", "290K", 3.9, C.ai],
+
+  ["scholar-metrics-import", "Google Scholar Metrics Import", "Community", "Pulls citation counts and h-index snapshots into a project's stats sidebar.", "Citations & References", "480K", 4.1, C.citations],
+  ["abbreviation-checker", "Abbreviation Consistency Checker", "Community", "Flags an acronym used before its first definition, or defined twice differently.", "Writing & Editing", "260K", 4.2, C.writing],
+  ["drawio-embed", "Draw.io Embed", "diagrams.net", "Edit draw.io diagrams inline and export straight to a LaTeX figure.", "Diagrams & Visualization", "540K", 4.5, C.diagrams],
+  ["advisor-review-mode", "Advisor Review Mode", "Community", "A read-annotate-only mode for sharing a draft with an advisor without edit risk.", "Collaboration", "190K", 4.3, C.collab],
+  ["colorblind-safe-theme", "Colourblind-Safe Diagnostics", "Community", "Remaps error/warning/hint colours to a colourblind-safe palette.", "Themes", "140K", 4.6, C.themes],
+  ["sample-size-justifier", "Sample Size Justifier", "Community", "Checks that a stated sample size matches the power analysis described.", "Data & Statistics", "85K", 3.9, C.data],
+  ["branch-per-revision", "Branch per Revision", "Community", "Auto-creates a git branch per revision round, named by reviewer round.", "Version Control", "120K", 3.8, C.git],
+  ["citation-budget-tracker", "Citation Budget Tracker", "Community", "Warns when a section leans on a single source too heavily relative to the rest.", "Productivity", "160K", 3.9, C.productivity],
+  ["latex-accessibility-tagger", "LaTeX Accessibility Tagger", "Community", "Adds tagged-PDF accessibility structure for screen readers on compile.", "Language Support", "70K", 4.0, C.lang],
+  ["model-card-generator", "Model Card Generator", "Community", "Drafts a model card section from your Methods, for ML papers.", "AI & Automation", "310K", 4.0, C.ai],
 ];
 
 function fillerBatch(): ExtensionEntry[] {

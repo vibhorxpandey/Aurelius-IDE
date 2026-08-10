@@ -187,6 +187,51 @@ def test_editing_a_bib_entry_does_re_verify_it():
     eng.shutdown()
 
 
+def test_engine_reports_live_progress_events_during_the_network_pass():
+    analyzer, _ = stub_analyzer(verdict=VerdictKind.VERIFIED.value)
+    events: list[tuple[str, str, str, str]] = []
+    eng = AnalysisEngine(
+        analyzers=[analyzer],
+        debounce_ms=10,
+        on_progress=lambda uri, key, source, status: events.append((uri, key, source, status)),
+    )
+    eng.update("u", TEX, 1, BIB)
+    time.sleep(0.25)
+    assert events == [
+        ("u", "smith2020", "stub_source", "checking"),
+        ("u", "smith2020", "stub_source", "hit"),
+    ]
+    eng.shutdown()
+
+
+def test_engine_drops_stale_progress_outcomes_for_superseded_document_versions():
+    """Same stale-result race as diagnostics: the *outcome* of a superseded pass must not
+    surface. A "checking" ping that fired before the edit is accurate for the moment it
+    fired, so only one terminal (hit/miss) event — the fresh pass's — should survive."""
+    analyzer, _ = stub_analyzer(delay=0.15)
+    events: list[tuple[str, str, str, str]] = []
+    eng = AnalysisEngine(
+        analyzers=[analyzer],
+        debounce_ms=1,
+        on_progress=lambda uri, key, source, status: events.append((uri, key, source, status)),
+    )
+    eng.update("u", TEX, 1, BIB)
+    time.sleep(0.02)
+    eng.update("u", TEX + " More prose here.", 2, BIB)
+    time.sleep(0.45)
+    terminal = [e for e in events if e[3] in ("hit", "miss")]
+    assert len(terminal) == 1, "only the fresh pass's outcome should survive"
+    eng.shutdown()
+
+
+def test_no_on_progress_configured_does_not_crash_the_network_pass():
+    analyzer, _ = stub_analyzer(verdict=VerdictKind.VERIFIED.value)
+    eng = AnalysisEngine(analyzers=[analyzer], debounce_ms=0)
+    diags = eng.analyze_now("u", TEX, BIB)
+    assert diags == []
+    eng.shutdown()
+
+
 def test_analyze_now_runs_both_phases_synchronously():
     analyzer, _ = stub_analyzer(verdict=VerdictKind.RETRACTED.value)
     eng = AnalysisEngine(analyzers=[UndefinedCitationAnalyzer(), analyzer], debounce_ms=0)

@@ -18,7 +18,7 @@ import sys
 
 import pytest
 
-from aurelius_ide.lsp import _path_to_uri, _uri_to_path
+from aurelius_ide.lsp import _path_to_uri, _uri_to_path, server
 
 WINDOWS_ONLY = pytest.mark.skipif(
     sys.platform != "win32", reason="drive-letter URIs are Windows-specific"
@@ -83,3 +83,23 @@ def test_percent_encoded_characters_are_decoded():
     path = _uri_to_path("file:///tmp/a%20paper.tex")
     assert path is not None
     assert path.name == "a paper.tex"
+
+
+def test_engine_is_wired_to_publish_live_verification_progress(monkeypatch):
+    """The engine's on_progress lands on the wire as aurelius/verificationProgress —
+    a fire-and-forget notification a client can ignore, not a fifth panel command."""
+    sent: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        server.protocol, "notify", lambda method, params: sent.append((method, params))
+    )
+
+    assert server.engine.on_progress == server._publish_progress
+    server.engine.on_progress("file:///p.tex", "smith2020", "openalex", "checking")
+
+    expected_params = {
+        "uri": "file:///p.tex",
+        "key": "smith2020",
+        "source": "openalex",
+        "status": "checking",
+    }
+    assert sent == [("aurelius/verificationProgress", expected_params)]

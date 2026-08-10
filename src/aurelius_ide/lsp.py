@@ -100,7 +100,9 @@ class AureliusLanguageServer(LanguageServer):
 
     def __init__(self) -> None:
         super().__init__(name=SERVER_NAME, version=SERVER_VERSION)
-        self.engine = AnalysisEngine(publish=self._publish_from_engine)
+        self.engine = AnalysisEngine(
+            publish=self._publish_from_engine, on_progress=self._publish_progress
+        )
         #: tex uri -> bib uri, so a .bib edit can re-run its dependents.
         self.bib_for: dict[str, str] = {}
 
@@ -135,6 +137,21 @@ class AureliusLanguageServer(LanguageServer):
     def _publish_from_engine(self, uri: str, diags: list[Diagnostic], version: int) -> None:
         """Callback invoked from the engine's background thread."""
         self.publish_split(uri, diags, version)
+
+    def _publish_progress(self, uri: str, key: str, source: str, status: str) -> None:
+        """A live 'checking OpenAlex...' step, sent the moment it happens.
+
+        Custom notification, not `$/progress` — that protocol wants a token created via a
+        `window/workDoneProgress/create` round trip per citation, which is more ceremony
+        than a fire-and-forget UI ping needs. Not part of the four-command panel contract
+        in ``client.ts`` either: this is a notification the client can simply ignore, not
+        a request it must answer, so there is nothing to keep in sync if a client doesn't
+        implement it.
+        """
+        self.protocol.notify(
+            "aurelius/verificationProgress",
+            {"uri": uri, "key": key, "source": source, "status": status},
+        )
 
     def publish_split(self, tex_uri: str, diags: list[Diagnostic], version: int) -> None:
         tex_diags, bib_diags = _partition(diags)

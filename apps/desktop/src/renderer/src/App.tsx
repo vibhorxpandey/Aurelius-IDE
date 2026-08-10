@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as monaco from "monaco-editor";
 import type { LspDiagnostic, ServerStatus } from "@shared/lsp-types";
 import { getApi, isElectron } from "./platform";
-import { LspClient, pathToFileUri, fileUriToPath } from "./lsp/client";
+import { LspClient, pathToFileUri, fileUriToPath, type VerificationProgressEvent } from "./lsp/client";
 import { ModelRegistry } from "./editor/modelRegistry";
 import { applyDiagnostics } from "./editor/diagnostics";
 import { registerLanguages } from "./monaco/languages";
@@ -50,6 +50,9 @@ export default function App() {
   const [revealTarget, setRevealTarget] = useState<{ uri: string; line: number } | null>(null);
   const [mermaidLive, setMermaidLive] = useState("");
   const [activityLog, setActivityLog] = useState<ActivityEvent[]>([]);
+  const [searchProgress, setSearchProgress] = useState<Map<string, VerificationProgressEvent[]>>(
+    new Map()
+  );
   const [debugConsoleLines, setDebugConsoleLines] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [lastCompileResult, setLastCompileResult] = useState<CompilePdfResult | null>(null);
@@ -114,11 +117,36 @@ export default function App() {
         title,
         diags.slice(0, 6).map((d) => `[${d.code}] ${d.message}`)
       );
+
+      // The network pass landing means every citation's cascade for this document has
+      // resolved one way or another — clear their live trackers rather than let a
+      // "checking..." step linger forever once there's nothing left to check.
+      if (hasVerification) {
+        setSearchProgress((prev) => {
+          if (prev.size === 0) return prev;
+          const next = new Map(prev);
+          for (const [key, events] of prev) {
+            if (events[0]?.uri === uri) next.delete(key);
+          }
+          return next;
+        });
+      }
+    });
+
+    const offProgress = client.onProgress((step) => {
+      setSearchProgress((prev) => {
+        const next = new Map(prev);
+        const events = next.get(step.key) ?? [];
+        const idx = events.findIndex((e) => e.source === step.source);
+        next.set(step.key, idx === -1 ? [...events, step] : events.map((e, i) => (i === idx ? step : e)));
+        return next;
+      });
     });
 
     return () => {
       offStatus();
       offDiagnostics();
+      offProgress();
       client.dispose();
       clientRef.current = null;
     };
@@ -402,7 +430,7 @@ export default function App() {
                 onShowPdf={showCompiledPdf}
               />
             ) : activeView === "agent" ? (
-              <AgentActivityPanel events={activityLog} />
+              <AgentActivityPanel events={activityLog} liveProgress={searchProgress} />
             ) : (
               <ExtensionsView />
             )}

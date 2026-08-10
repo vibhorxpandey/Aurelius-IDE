@@ -287,6 +287,32 @@ def test_compiled_pdf_is_copied_to_the_requested_output(tmp_path):
     assert pdf_output.read_bytes().startswith(b"%PDF-1.5")
 
 
+def test_check_with_log_returns_the_same_diagnostics_as_check(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+    log = "./paper.tex:6: Undefined control sequence.\n"
+
+    gate = CompileGate(runner=StubRunner(log=log))
+    diags_only = gate.check(tex)
+    diags_with_log, returned_log = gate.check_with_log(tex)
+
+    assert diags_with_log == diags_only
+    assert returned_log == log
+
+
+def test_check_with_log_reports_the_reason_when_unavailable(tmp_path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(PAPER, encoding="utf-8")
+
+    gate = CompileGate(runner=StubRunner(unavailable="no toolchain configured"))
+    diags, log = gate.check_with_log(tex)
+
+    # Same rule as check(): inconclusive is not a finding, so no diagnostics — but the
+    # log slot carries *why*, since a Debug Console needs something to show either way.
+    assert diags == []
+    assert log == "no toolchain configured"
+
+
 def test_pdf_output_defaults_to_none_and_writes_nothing(tmp_path):
     tex = tmp_path / "paper.tex"
     tex.write_text(PAPER, encoding="utf-8")

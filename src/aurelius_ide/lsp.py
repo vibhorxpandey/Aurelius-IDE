@@ -484,7 +484,7 @@ def compile_pdf(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str,
         return {"ok": False, "reason": "No LaTeX toolchain available."}
 
     pdf_output = path.with_suffix(".pdf")
-    diags = gate.check(path, bib_path=bib_path, source=source, pdf_output=pdf_output)
+    diags, log = gate.check_with_log(path, bib_path=bib_path, source=source, pdf_output=pdf_output)
     instant = ls.engine.diagnostics(uri)
     ls.publish_split(uri, instant + diags, 0)
 
@@ -494,6 +494,9 @@ def compile_pdf(ls: AureliusLanguageServer, uri: str | None = None) -> dict[str,
         "ok": True,
         "pdfPath": str(pdf_output) if produced else None,
         "pdfUri": _path_to_uri(pdf_output) if produced else None,
+        # The real, complete transcript — a Debug Console shows this verbatim, distinct
+        # from `diagnostics`, which is what parse_log distilled out of the same text.
+        "log": log,
         "diagnostics": len(diags),
         "errors": len(errors),
     }

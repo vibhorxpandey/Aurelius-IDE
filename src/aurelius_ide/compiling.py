@@ -298,7 +298,38 @@ class CompileGate:
         returns — same as always — so this is the only way a caller gets the actual PDF
         bytes rather than just a verdict about them. Nothing is written if the build
         produced no PDF, so a failed compile never leaves a stale one in place silently.
+
+        See :meth:`check_with_log` for the raw compiler transcript alongside the same
+        diagnostics, if a caller wants both.
         """
+        diagnostics, _log = self._check_impl(tex_path, bib_path, source, pdf_output)
+        return diagnostics
+
+    def check_with_log(
+        self,
+        tex_path: Path,
+        bib_path: Path | None = None,
+        source: str | None = None,
+        pdf_output: Path | None = None,
+    ) -> tuple[list[Diagnostic], str]:
+        """Like :meth:`check`, but also returns the raw compiler transcript.
+
+        For a Debug-Console-style view that wants to show what the toolchain actually
+        printed, verbatim — not the distilled findings ``parse_log`` extracts from it. A
+        separate method rather than a parameter on ``check()``, because every existing
+        caller of ``check()`` expects exactly a ``list[Diagnostic]`` back, and changing
+        that return shape under callers that don't ask for the log would be a breaking
+        change for no benefit to them.
+        """
+        return self._check_impl(tex_path, bib_path, source, pdf_output)
+
+    def _check_impl(
+        self,
+        tex_path: Path,
+        bib_path: Path | None,
+        source: str | None,
+        pdf_output: Path | None,
+    ) -> tuple[list[Diagnostic], str]:
         tex_path = Path(tex_path)
         text = source if source is not None else _read(tex_path)
         outcome = self._compile(tex_path, bib_path, text, pdf_output=pdf_output)
@@ -307,9 +338,9 @@ class CompileGate:
         # as a compile failure is the same error as reporting a dropped connection as a
         # fabricated citation, and it is just as alarming to be wrong about.
         if outcome.unavailable:
-            return []
+            return [], outcome.unavailable
 
-        return parse_log(outcome, text)
+        return parse_log(outcome, text), outcome.log
 
     def available(self) -> bool:
         return bool(getattr(self.runner, "available", True))

@@ -1,8 +1,17 @@
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { LspServerProcess } from "./lspServer.js";
 import { TerminalProcess } from "./terminalProcess.js";
-import { listDirectory, readTextFile, writeTextFile, isDirectory } from "./workspaceFs.js";
+import {
+  listDirectory,
+  readTextFile,
+  writeTextFile,
+  isDirectory,
+  readBinaryFileBase64,
+  createFile,
+  createFolder,
+  copyFileTo,
+} from "./workspaceFs.js";
 import type { JsonRpcMessage } from "../shared/lsp-types";
 
 let mainWindow: BrowserWindow | null = null;
@@ -79,11 +88,27 @@ function registerIpc(): void {
     writeTextFile(path, content)
   );
   ipcMain.handle("workspace:is-directory", (_e, path: string) => isDirectory(path));
+  ipcMain.handle("workspace:read-binary", (_e, path: string) => readBinaryFileBase64(path));
+  ipcMain.handle("workspace:create-file", (_e, path: string) => createFile(path));
+  ipcMain.handle("workspace:create-folder", (_e, path: string) => createFolder(path));
 
   ipcMain.handle("workspace:open-folder-dialog", async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, { properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  // Backs "Download PDF": a real save dialog, then a real file copy of the real compiled
+  // artefact — never a synthesised placeholder.
+  ipcMain.handle("workspace:download-file", async (_e, sourcePath: string) => {
+    if (!mainWindow) return false;
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: basename(sourcePath),
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    await copyFileTo(sourcePath, result.filePath);
+    return true;
   });
 
   ipcMain.on("lsp:send", (_e, message: JsonRpcMessage) => lsp?.send(message));

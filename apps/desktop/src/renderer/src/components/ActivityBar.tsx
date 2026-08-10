@@ -1,12 +1,24 @@
-import { ExplorerIcon, BookIcon, GateIcon, DiagramIcon, ActivityIcon, ExtensionsIcon } from "./icons";
+import { ExplorerIcon, BookIcon, GateIcon, DiagramIcon, PlayIcon, ActivityIcon, ExtensionsIcon } from "./icons";
 
-export type ActivityView = "explorer" | "bibliography" | "gate" | "diagrams" | "agent" | "extensions";
+export type ActivityView =
+  | "explorer"
+  | "bibliography"
+  | "gate"
+  | "diagrams"
+  | "run"
+  | "agent"
+  | "extensions";
 
 interface ActivityBarProps {
   active: ActivityView;
   onChange: (view: ActivityView) => void;
   bibliographyProblems: number;
   gateBlocking: number;
+  profileName?: string;
+  profileColour?: string;
+  profileInitials?: string;
+  profileActive?: boolean;
+  onProfileClick?: () => void;
 }
 
 const ITEMS: { id: ActivityView; label: string; Icon: typeof ExplorerIcon }[] = [
@@ -14,6 +26,7 @@ const ITEMS: { id: ActivityView; label: string; Icon: typeof ExplorerIcon }[] = 
   { id: "bibliography", label: "Bibliography", Icon: BookIcon },
   { id: "gate", label: "Submission Gate", Icon: GateIcon },
   { id: "diagrams", label: "Architecture & Diagrams", Icon: DiagramIcon },
+  { id: "run", label: "Run and Debug", Icon: PlayIcon },
   { id: "agent", label: "Agent Activity", Icon: ActivityIcon },
   { id: "extensions", label: "Extensions", Icon: ExtensionsIcon },
 ];
@@ -23,6 +36,11 @@ export default function ActivityBar({
   onChange,
   bibliographyProblems,
   gateBlocking,
+  profileName,
+  profileColour,
+  profileInitials,
+  profileActive,
+  onProfileClick,
 }: ActivityBarProps) {
   return (
     <div className="activitybar">
@@ -43,6 +61,20 @@ export default function ActivityBar({
           );
         })}
       </div>
+      {profileName && (
+        <div className="activitybar__footer">
+          <div
+            className="activitybar__profile"
+            data-active={profileActive}
+            title={profileName}
+            onClick={onProfileClick}
+          >
+            <span className="activitybar__avatar" style={{ background: profileColour }}>
+              {profileInitials}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

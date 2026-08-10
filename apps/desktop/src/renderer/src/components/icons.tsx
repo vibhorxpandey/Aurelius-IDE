@@ -177,6 +177,45 @@ export const RefreshIcon = (p: IconProps) =>
 export const PlayIcon = (p: IconProps) =>
   base(<path d="M4.5 3l8 5-8 5V3Z" fill="currentColor" stroke="none" />, p);
 
+export const DownloadIcon = (p: IconProps) =>
+  base(
+    <path
+      d="M8 2.5v7.2M4.8 6.9 8 10.1l3.2-3.2M3 12.5h10"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />,
+    p
+  );
+
+export const NewFileIcon = (p: IconProps) =>
+  base(
+    <>
+      <path
+        d="M4 2h5l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <path d="M9 2v3h3" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 7.5v4M6 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </>,
+    p
+  );
+
+export const NewFolderIcon = (p: IconProps) =>
+  base(
+    <>
+      <path
+        d="M2 4.2A1.2 1.2 0 0 1 3.2 3h2.4l1 1.2H12.8A1.2 1.2 0 0 1 14 5.4v6.4A1.2 1.2 0 0 1 12.8 13H3.2A1.2 1.2 0 0 1 2 11.8V4.2Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <path d="M8 6.8v4M6 8.8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </>,
+    p
+  );
+
 export const ErrorIcon = (p: IconProps) =>
   base(
     <>

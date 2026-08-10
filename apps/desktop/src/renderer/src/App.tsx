@@ -15,13 +15,15 @@ import Explorer from "./components/Explorer";
 import TabBar from "./components/TabBar";
 import EditorPane from "./components/EditorPane";
 import StatusBar from "./components/StatusBar";
-import ProblemsPanel from "./components/ProblemsPanel";
+import ProblemsPanel, { type BottomTab } from "./components/ProblemsPanel";
 import BibliographyPanel from "./components/BibliographyPanel";
 import GatePanel from "./components/GatePanel";
 import DiagramsPanel from "./components/DiagramsPanel";
 import AgentActivityPanel from "./components/AgentActivityPanel";
 import ExtensionsView from "./components/ExtensionsView";
 import MermaidPreview from "./components/MermaidPreview";
+import PdfPreview from "./components/PdfPreview";
+import RunAndDebugPanel, { type CompilePdfResult } from "./components/RunAndDebugPanel";
 import LoginScreen from "./components/LoginScreen";
 import ProfilePanel from "./components/ProfilePanel";
 import { LogoMark } from "./components/icons";
@@ -42,12 +44,18 @@ export default function App() {
   const [activeUri, setActiveUri] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActivityView>("explorer");
   const [problemsCollapsed, setProblemsCollapsed] = useState(false);
-  const [bottomTab, setBottomTab] = useState<"problems" | "terminal">("problems");
+  const [bottomTab, setBottomTab] = useState<BottomTab>("problems");
   const [diagnosticsByUri, setDiagnosticsByUri] = useState<Map<string, LspDiagnostic[]>>(new Map());
   const [refreshToken, setRefreshToken] = useState(0);
   const [revealTarget, setRevealTarget] = useState<{ uri: string; line: number } | null>(null);
   const [mermaidLive, setMermaidLive] = useState("");
   const [activityLog, setActivityLog] = useState<ActivityEvent[]>([]);
+  const [debugConsoleLines, setDebugConsoleLines] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const [lastCompileResult, setLastCompileResult] = useState<CompilePdfResult | null>(null);
+  const [pdfInfo, setPdfInfo] = useState<{ texUri: string; pdfPath: string } | null>(null);
+  const [pdfRefreshToken, setPdfRefreshToken] = useState(0);
+  const [pdfVisible, setPdfVisible] = useState(false);
 
   const registry = useRef(new ModelRegistry()).current;
   const clientRef = useRef<LspClient | null>(null);
@@ -269,6 +277,51 @@ export default function App() {
   const gateBlocking = allDiagnostics.filter((d) => d.code === "AUR010").length;
   const latexUri = tabs.find((t) => t.language === "latex")?.uri ?? activeUri;
 
+  // "Run" for a paper means one thing: a real pdflatex/Tectonic pass via the
+  // `aurelius.compilePdf` command — see RunAndDebugPanel's docstring. The transcript that
+  // comes back is the toolchain's actual stdout/stderr, not a canned string.
+  const handleRun = useCallback(async () => {
+    const client = clientRef.current;
+    const uri = latexUri;
+    if (!client || !uri || running) return;
+    setRunning(true);
+    setBottomTab("debug");
+    const fileName = basename(fileUriToPath(uri));
+    setDebugConsoleLines((prev) => [...prev, `$ compile ${fileName}`]);
+    try {
+      const result = await client.executeCommand<CompilePdfResult>("aurelius.compilePdf", [uri]);
+      setLastCompileResult(result);
+      if (result.log) {
+        setDebugConsoleLines((prev) => [...prev, ...result.log!.split("\n")]);
+      }
+      if (result.ok && result.pdfPath) {
+        setPdfInfo({ texUri: uri, pdfPath: result.pdfPath });
+        setPdfRefreshToken((t) => t + 1);
+        setPdfVisible(true);
+        logActivity("build", `Compiled ${fileName} → PDF`, [
+          `${result.errors ?? 0} error(s) · ${result.diagnostics ?? 0} finding(s)`,
+        ]);
+      } else {
+        logActivity("error", "Compile failed", [result.reason ?? "unknown reason"]);
+      }
+      setRefreshToken((t) => t + 1);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setDebugConsoleLines((prev) => [...prev, `error: ${message}`]);
+      logActivity("error", "Compile failed", [message]);
+    } finally {
+      setRunning(false);
+    }
+  }, [latexUri, running, logActivity]);
+
+  const showCompiledPdf = useCallback(() => {
+    if (!pdfInfo) return;
+    void openFile(fileUriToPath(pdfInfo.texUri));
+    setPdfVisible(true);
+  }, [pdfInfo, openFile]);
+
+  const isPdfActive = pdfVisible && !!pdfInfo && activeTab?.uri === pdfInfo.texUri && !isMermaidActive;
+
   if (!profile) {
     return <LoginScreen onContinue={handleLogin} />;
   }
@@ -308,6 +361,11 @@ export default function App() {
           onChange={setActiveView}
           bibliographyProblems={bibliographyProblems}
           gateBlocking={gateBlocking}
+          profileName={profile.name}
+          profileColour={avatarColour(profile.name)}
+          profileInitials={initials(profile.name)}
+          profileActive={profilePanelOpen}
+          onProfileClick={() => setProfilePanelOpen((v) => !v)}
         />
 
         <div className="sidebar">
@@ -331,6 +389,15 @@ export default function App() {
               />
             ) : activeView === "diagrams" ? (
               <DiagramsPanel rootPath={rootPath} activePath={activeTab?.path ?? null} onOpenFile={(p) => void openFile(p)} />
+            ) : activeView === "run" ? (
+              <RunAndDebugPanel
+                client={clientRef.current}
+                activeUri={latexUri}
+                running={running}
+                lastResult={lastCompileResult}
+                onRun={() => void handleRun()}
+                onShowPdf={showCompiledPdf}
+              />
             ) : activeView === "agent" ? (
               <AgentActivityPanel events={activityLog} />
             ) : (
@@ -369,6 +436,28 @@ export default function App() {
                   <MermaidPreview content={mermaidLive} />
                 </div>
               </div>
+            ) : isPdfActive && pdfInfo ? (
+              <div className="split-view">
+                <div className="split-view__pane">
+                  <div className="split-view__label">Source</div>
+                  <EditorPane
+                    activeUri={activeUri}
+                    registry={registry}
+                    onContentChange={handleContentChange}
+                    onSaveRequested={() => void saveActive()}
+                    revealTarget={revealTarget}
+                  />
+                </div>
+                <div className="split-view__pane">
+                  <div className="split-view__label">
+                    Compiled paper
+                    <span className="split-view__close" onClick={() => setPdfVisible(false)}>
+                      Hide
+                    </span>
+                  </div>
+                  <PdfPreview pdfPath={pdfInfo.pdfPath} refreshToken={pdfRefreshToken} />
+                </div>
+              </div>
             ) : (
               <EditorPane
                 activeUri={activeUri}
@@ -385,6 +474,7 @@ export default function App() {
               onJump={revealInEditor}
               bottomTab={bottomTab}
               onBottomTabChange={setBottomTab}
+              debugConsoleLines={debugConsoleLines}
             />
           </div>
         </div>

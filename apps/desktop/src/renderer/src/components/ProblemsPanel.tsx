@@ -9,21 +9,25 @@ interface ProblemEntry {
   diagnostic: LspDiagnostic;
 }
 
+export type BottomTab = "problems" | "debug" | "terminal";
+
 interface ProblemsPanelProps {
   diagnosticsByUri: Map<string, LspDiagnostic[]>;
   collapsed: boolean;
   onToggle: () => void;
   onJump: (uri: string, line: number) => void;
-  bottomTab: "problems" | "terminal";
-  onBottomTabChange: (tab: "problems" | "terminal") => void;
+  bottomTab: BottomTab;
+  onBottomTabChange: (tab: BottomTab) => void;
+  /** Real toolchain transcript lines — see CompileGate.check_with_log on the server. */
+  debugConsoleLines: string[];
 }
 
 const ICON = { 1: ErrorIcon, 2: WarningIcon, 3: InfoIcon, 4: HintIcon } as const;
 
 /**
- * Owns the whole bottom panel, not just Problems — Problems and the integrated Terminal
- * share one collapsible strip, VS Code-style. The terminal stays mounted (hidden via CSS,
- * not unmounted) whichever tab is active, because unmounting it would kill the real shell
+ * Owns the whole bottom panel — Problems, Debug Console, and the integrated Terminal share
+ * one collapsible strip, VS Code-style. The terminal stays mounted (hidden via CSS, not
+ * unmounted) whichever tab is active, because unmounting it would kill the real shell
  * process underneath every time you switched away and back.
  */
 export default function ProblemsPanel({
@@ -33,6 +37,7 @@ export default function ProblemsPanel({
   onJump,
   bottomTab,
   onBottomTabChange,
+  debugConsoleLines,
 }: ProblemsPanelProps) {
   const entries: ProblemEntry[] = [];
   for (const [uri, diags] of diagnosticsByUri) {
@@ -59,6 +64,13 @@ export default function ProblemsPanel({
             onClick={() => onBottomTabChange("problems")}
           >
             Problems
+          </span>
+          <span
+            className="problems__tab"
+            data-active={bottomTab === "debug"}
+            onClick={() => onBottomTabChange("debug")}
+          >
+            Debug Console
           </span>
           <span
             className="problems__tab"
@@ -112,6 +124,21 @@ export default function ProblemsPanel({
           })
         )}
       </div>
+
+      <div
+        className="debug-console"
+        style={{ display: !collapsed && bottomTab === "debug" ? "block" : "none" }}
+      >
+        {debugConsoleLines.length === 0 ? (
+          <div className="problems__empty">
+            No output yet — run the paper from Run and Debug to see the real compiler
+            transcript here.
+          </div>
+        ) : (
+          <pre className="debug-console__pre">{debugConsoleLines.join("\n")}</pre>
+        )}
+      </div>
+
       {/* Always mounted — collapsing the panel must not kill the shell process underneath. */}
       <TerminalPanel visible={!collapsed && bottomTab === "terminal"} />
     </div>

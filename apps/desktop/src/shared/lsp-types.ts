@@ -124,6 +124,12 @@ export interface AureliusApi {
     write: (path: string, content: string) => Promise<void>;
     isDirectory: (path: string) => Promise<boolean>;
     openFolderDialog: () => Promise<string | null>;
+    /** Base64-encoded bytes — used for the compiled PDF, not for editable text files. */
+    readBinary: (path: string) => Promise<string>;
+    createFile: (path: string) => Promise<void>;
+    createFolder: (path: string) => Promise<void>;
+    /** Shows a real save dialog and copies the real file there. Resolves false on cancel. */
+    downloadFile: (sourcePath: string) => Promise<boolean>;
   };
   lsp: {
     send: (message: JsonRpcMessage) => void;

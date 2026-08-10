@@ -9,6 +9,7 @@ const KIND_LOOK: Record<ActivityKind, { icon: string; colour: string; label: str
   structural: { icon: "⚡", colour: "var(--sev-info)", label: "Structural pass" },
   verified: { icon: "🔎", colour: "#4ec9b0", label: "Verification pass" },
   gate: { icon: "🚦", colour: "var(--fg-default)", label: "Submission gate" },
+  build: { icon: "📄", colour: "var(--fg-default)", label: "Compile" },
   search: { icon: "🔍", colour: "var(--fg-default)", label: "Literature search" },
   error: { icon: "✕", colour: "var(--sev-error)", label: "Error" },
 };

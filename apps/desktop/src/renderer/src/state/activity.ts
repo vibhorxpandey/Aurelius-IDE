@@ -1,4 +1,4 @@
-export type ActivityKind = "connect" | "structural" | "verified" | "gate" | "search" | "error";
+export type ActivityKind = "connect" | "structural" | "verified" | "gate" | "build" | "search" | "error";
 
 export interface ActivityEvent {
   id: number;

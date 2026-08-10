@@ -44,16 +44,19 @@ throughout this project's docs and tests: an undefined citation key, an uncited 
 prose with no source. Diagnostics appear as you type; they are not staged. A local profile
 gate (name only, no password — see below) runs once per machine before the workspace opens.
 
-## The six additions, and what's real about each
+## The additions, and what's real about each
 
 | Feature | What's real | What isn't |
 |---|---|---|
-| **Login** | A local display identity, stored in `localStorage`. Personalises the workspace and the profile panel. | Not authentication — no password, no backend, no third-party sign-in. Said so on the screen itself. |
+| **Login** | A local display identity, stored in `localStorage`. Personalises the workspace, the profile panel, and the profile icon docked at the bottom of the activity bar (VS Code puts Accounts there). | Not authentication — no password, no backend, no third-party sign-in. Said so on the screen itself. |
 | **Right profile panel** | Every number is read off the same diagnostics state the rest of the app renders from — files open, errors, warnings, files analyzed. No separate stats source to drift out of sync. | — |
 | **Terminal** | A genuine shell process (`cmd.exe` / `$SHELL`), spawned by the main process, streaming real stdout/stderr. Run `ls`, `git status`, `python --version` — they actually execute. | Not a full PTY (no `node-pty`, to avoid a native-compilation dependency). Line-buffered with local echo, not real terminal semantics — arrow-key history and full-screen programs (vim, htop) don't work. |
-| **Agent Activity** | Every entry is derived from an actual `publishDiagnostics` batch, status change, or gate run the client received. "Structural" vs. "verification" pass is read off which diagnostic codes are present (AUR002/003/004 are network-only) — the real two-phase split from `ARCHITECTURE.md` § 4, made visible. | — |
+| **Agent Activity** | Every entry is derived from an actual `publishDiagnostics` batch, status change, gate run, or compile the client received. "Structural" vs. "verification" pass is read off which diagnostic codes are present (AUR002/003/004 are network-only) — the real two-phase split from `ARCHITECTURE.md` § 4, made visible. | — |
 | **Architecture & Diagrams** | Live Mermaid rendering (`mermaid.render`, sandboxed via `securityLevel: "strict"`) of `.mmd` files, source and preview updating together. `demo-workspace/architecture.mmd` diagrams Aurelius's own real module layout. | — |
 | **Extensions** | 4 built-in tools (Bibliography, Submission Gate, Diagrams, Agent Activity) — these are the real panels above, just also listed here. | 113 marketplace entries are catalogue data (`data/extensions.ts`) for a populated-looking view — nothing installs or runs. Said so in the panel's own doc comment. |
+| **Run and Debug → compiled paper** | "Run" invokes the real `aurelius.compilePdf` LSP command, which shells out to an actual LaTeX toolchain (`pdflatex`/`bibtex`, or `tectonic` — see `compiling.py::default_gate`) against the file on disk. The toolchain's own stdout/stderr lands verbatim in the Debug Console. On success the produced PDF opens in a source/PDF split view, rendered by `pdf.js` from the real bytes on disk — not an image or a canned preview — with a working Download button (`dialog.showSaveDialog` + a real file copy). | If no LaTeX toolchain is on `PATH` (and no `AURELIUS_LATEX`/`AURELIUS_TECTONIC` override), the panel reports that honestly rather than staging a result — see invariant 7 in the root `CLAUDE.md`. |
+| **New File / New Folder** | Explorer toolbar icons create real filesystem entries via IPC (`workspace:create-file`, `workspace:create-folder`, both refusing to overwrite) and re-list the directory from disk afterward — not a client-side tree mutation. | No rename or delete from the Explorer yet. |
+| **Debug Console** | A third tab alongside Problems and Terminal in the bottom panel, showing the exact compiler transcript from the most recent `aurelius.compilePdf` run. | Only populated by compiles — it isn't a general stdout sink. |
 
 ## Architecture, briefly
 
@@ -72,9 +75,10 @@ src/renderer/src/
                        hand-written Monarch tokenizers, not full grammars.
   state/               profile.ts (local identity), activity.ts (the live event log).
   components/          ActivityBar, Explorer, TabBar, EditorPane, StatusBar,
-                       ProblemsPanel (also hosts the Terminal tab), BibliographyPanel,
-                       GatePanel, DiagramsPanel, MermaidPreview, AgentActivityPanel,
-                       ExtensionsView, LoginScreen, ProfilePanel.
+                       ProblemsPanel (hosts Problems, Debug Console, and Terminal),
+                       BibliographyPanel, GatePanel, DiagramsPanel, MermaidPreview,
+                       RunAndDebugPanel, PdfPreview, AgentActivityPanel, ExtensionsView,
+                       LoginScreen, ProfilePanel.
   platform.ts          Detects whether a preload bridge exists. Outside Electron (e.g. a
                        browser pointed at the Vite dev server) the shell still renders
                        with static content, clearly labelled — real operations refuse
@@ -97,3 +101,8 @@ it:
   `aurelius.debounceMs` — same gap the roadmap already tracks for the extension.
 - **No unsaved-changes prompt on close.** Closing a dirty tab discards the buffer; the
   file on disk is untouched, but in-editor changes are lost silently.
+- **`pdfjs-dist` is pinned to `4.10.38`, not latest.** 6.x calls brand-new TypedArray/Map
+  built-ins (`Uint8Array.prototype.toHex`, `Map.prototype.getOrInsertComputed`) with no
+  feature-detection, and Electron 33's bundled Chromium 130 predates all of them — every
+  compiled PDF failed to render until this was pinned back to a version that targets the
+  browser generation this Electron actually ships.

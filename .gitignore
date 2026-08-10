@@ -12,6 +12,7 @@ htmlcov/
 node_modules/
 editors/vscode/out/
 apps/desktop/out/
+apps/desktop/demo-workspace/*.pdf
 *.tsbuildinfo
 *.vsix
 .DS_Store

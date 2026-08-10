@@ -52,6 +52,16 @@ const mockApi: AureliusApi = {
     },
     isDirectory: async (path: string) => path === "/demo-workspace",
     openFolderDialog: async () => null,
+    readBinary: async () => {
+      throw new Error("Preview mode — PDF loading needs Electron.");
+    },
+    createFile: async () => {
+      throw new Error("Read-only preview (not running inside Electron)");
+    },
+    createFolder: async () => {
+      throw new Error("Read-only preview (not running inside Electron)");
+    },
+    downloadFile: async () => false,
   },
   lsp: {
     send: () => {},

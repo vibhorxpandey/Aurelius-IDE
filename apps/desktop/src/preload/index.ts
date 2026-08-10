@@ -22,6 +22,13 @@ const api: AureliusApi = {
       ipcRenderer.invoke("workspace:is-directory", path),
     openFolderDialog: (): Promise<string | null> =>
       ipcRenderer.invoke("workspace:open-folder-dialog"),
+    readBinary: (path: string): Promise<string> =>
+      ipcRenderer.invoke("workspace:read-binary", path),
+    createFile: (path: string): Promise<void> => ipcRenderer.invoke("workspace:create-file", path),
+    createFolder: (path: string): Promise<void> =>
+      ipcRenderer.invoke("workspace:create-folder", path),
+    downloadFile: (sourcePath: string): Promise<boolean> =>
+      ipcRenderer.invoke("workspace:download-file", sourcePath),
   },
   lsp: {
     send: (message: JsonRpcMessage): void => ipcRenderer.send("lsp:send", message),

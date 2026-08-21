@@ -1,0 +1,23 @@
+{
+  "name": "aurelius-ide",
+  "version": "0.4.0",
+  "description": "npm bootstrapper for aurelius-ide, a language server for research papers (live citation verification and claim analysis for LaTeX). Installs the underlying Python package via pip.",
+  "keywords": ["latex", "lsp", "language-server", "citations", "bibtex", "research", "academic"],
+  "homepage": "https://github.com/vibhorxpandey/Aurelius-IDE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vibhorxpandey/Aurelius-IDE.git"
+  },
+  "bugs": "https://github.com/vibhorxpandey/Aurelius-IDE/issues",
+  "license": "MIT",
+  "author": "Vibhor Pandey",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "files": [
+    "scripts/postinstall.js"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

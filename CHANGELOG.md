@@ -33,6 +33,19 @@ rename is a breaking change even though nothing fails to compile.
 
 ### Added
 
+- **`npm install aurelius-ide`.** A root-level `package.json` publishes this project to
+  npm as a thin bootstrapper: its `postinstall` (`scripts/postinstall.js`) detects a
+  Python 3.10+ interpreter and runs `pip install aurelius-ide[all]` under the hood, then
+  falls back to installing straight from this repository's tag if the pinned version
+  isn't on PyPI yet. It does not reimplement anything — the language server is still
+  pure Python; this just gives npm-first users and tooling a familiar install path. The
+  package's version is kept in lockstep with `__version__` by `sync_version.py`, same as
+  the VS Code extension.
+- **Real PyPI and npm publishing in the release workflow.** `.github/workflows/release.yml`
+  now has `pypi` (via `pypa/gh-action-pypi-publish`, OIDC trusted publishing, no stored
+  secret) and `npm` (via a repo-scoped `NPM_TOKEN`) jobs, gated to real tag pushes only.
+  Both still need one-time manual account setup outside this repo before they'll
+  succeed — see the comment at the top of `release.yml`.
 - **Live, per-source verification progress.** `AnalysisEngine` takes an `on_progress`
   callback — `(uri, key, source, status)`, fired as each citation is actually checked
   against OpenAlex, Crossref, arXiv, and Semantic Scholar in that real cascade order (the

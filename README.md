@@ -20,7 +20,20 @@ references.bib
 
 ## Install
 
-Not yet on PyPI. Install from the repository:
+```bash
+pip install "aurelius-ide[all]"
+```
+
+Prefer npm? This bootstraps the same Python package — it shells out to `pip` under the
+hood (see [`scripts/postinstall.js`](scripts/postinstall.js)), so Python 3.10+ must
+already be on your PATH:
+
+```bash
+npm install aurelius-ide
+```
+
+Not on PyPI for the version you need yet, or want the bleeding edge? Install straight
+from the repository:
 
 ```bash
 pip install "aurelius-ide[all] @ git+https://github.com/vibhorxpandey/Aurelius-IDE"

@@ -12,6 +12,7 @@ The canonical version now lives in exactly one place — ``__version__`` in
     __init__.py  ──►  pyproject.toml           (hatchling reads it dynamically)
                  ──►  lsp.py SERVER_VERSION    (imports it at runtime)
                  ──►  editors/vscode/package.json
+                 ──►  package.json             (the npm postinstall bootstrapper)
                  ──►  release-manifest.json    (consumed by the website)
 
 Run with ``--check`` in CI. It exits non-zero if anything has drifted, which is the only
@@ -32,6 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INIT = ROOT / "src" / "aurelius_ide" / "__init__.py"
 EXTENSION_MANIFEST = ROOT / "editors" / "vscode" / "package.json"
+ROOT_PACKAGE_JSON = ROOT / "package.json"
 MANIFEST = ROOT / "release-manifest.json"
 
 _VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.M)
@@ -86,6 +88,24 @@ def sync_extension(version: str, *, check: bool) -> list[str]:
     return [f"extension {current} -> {version}"]
 
 
+def sync_root_package(version: str, *, check: bool) -> list[str]:
+    """The npm bootstrapper ships the same version as the Python package it installs —
+    `postinstall.js` pins `pip install aurelius-ide[...]==<this version>`, so drift here
+    means the npm package silently installs the wrong PyPI release."""
+    text = ROOT_PACKAGE_JSON.read_text(encoding="utf-8")
+    current = json.loads(text)["version"]
+    if current == version:
+        return []
+    if check:
+        raise Drift(
+            f"{ROOT_PACKAGE_JSON.relative_to(ROOT)} says {current}, expected {version}"
+        )
+    ROOT_PACKAGE_JSON.write_text(
+        _PKG_VERSION_RE.sub(rf'\g<1>"{version}"', text, count=1), encoding="utf-8"
+    )
+    return [f"npm package {current} -> {version}"]
+
+
 def sync_manifest(version: str, *, check: bool) -> list[str]:
     """Emit the facts the website is otherwise tempted to hardcode."""
     payload = {
@@ -118,8 +138,10 @@ def main() -> int:
 
     version = canonical_version()
     try:
-        changes = sync_extension(version, check=args.check) + sync_manifest(
-            version, check=args.check
+        changes = (
+            sync_extension(version, check=args.check)
+            + sync_root_package(version, check=args.check)
+            + sync_manifest(version, check=args.check)
         )
     except Drift as drift:
         print(f"version drift: {drift}", file=sys.stderr)

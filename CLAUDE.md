@@ -175,6 +175,10 @@ honest list — no project model, six LSP features, three settings that do nothi
 viewer, nothing published. That section is the baseline the roadmap is measured against, so
 keep it accurate.
 
+[ROADMAP.md](ROADMAP.md) has the longer-term direction: a Verifier API, a machine-checkable
+research-artifact protocol, and a regulated-research audit-trail layer, all built on the
+verification engine that already exists here.
+
 - Claim-to-source binding is *partial*. `AUR009` catches prose that contradicts the entry
   it cites — the wrong-key case. It cannot tell whether a work genuinely supports the
   assertion, so a sentence citing a real, correctly-named, topically unrelated paper still

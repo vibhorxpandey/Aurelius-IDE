@@ -160,7 +160,8 @@ Marketplace or Open VSX. It contributes a bibliography panel, a submission-gate 
 literature search bound to <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd>.
 
 The client is thin on purpose. `client.ts` is the only module that talks to the server,
-and panels ask for **structured state** via four `@server.command` handlers in `lsp.py` —
+and panels ask for **structured state** via four of the five `@server.command` handlers in
+`lsp.py` —
 `bibliographyStatus`, `searchLiterature`, `submissionGate`, `compileGate`. They do not
 re-derive state by parsing diagnostic messages, which would mean a second copy of the
 parser in TypeScript that drifts the first time a message is reworded.

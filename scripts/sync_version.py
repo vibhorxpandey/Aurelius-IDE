@@ -61,10 +61,23 @@ def test_count() -> int:
     )
     # `-q --collect-only` prints "path::test" lines, then a per-file summary. Counting the
     # summary lines is stable across pytest versions; counting dots is not.
-    return sum(
+    count = sum(
         int(m.group(1))
         for m in re.finditer(r"^tests[/\\]\S+:\s*(\d+)$", result.stdout, re.M)
     )
+    # A pytest that never ran — not installed, a collection error, a plugin crash — prints no
+    # summary lines at all, and this sum is then 0. That zero is indistinguishable from an
+    # answer by the time it reaches the payload, and it was corrosive in both directions:
+    # `--check` blamed a stale manifest and told you to run the writing form, which then
+    # rewrote release-manifest.json with "tests": 0 — the script's own guarantee, inverted.
+    # Fail loudly instead; a count this file cannot establish is not a count.
+    if result.returncode != 0 or count == 0:
+        detail = (result.stderr.strip() or result.stdout.strip()).splitlines()[-5:]
+        raise SystemExit(
+            f"cannot count tests: pytest exited {result.returncode}. "
+            'Run: pip install -e ".[dev]"\n' + "\n".join(detail)
+        )
+    return count
 
 
 def sync_extension(version: str, *, check: bool) -> list[str]:

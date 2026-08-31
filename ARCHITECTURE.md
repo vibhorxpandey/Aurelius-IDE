@@ -29,8 +29,8 @@ scheduling, the caching, and the error handling:
 | Parse errors vs. type errors | Structural pass vs. network pass |
 | Build failure | The paper does not compile |
 
-**Size, for orientation:** 3,472 lines of Python across 15 modules, 836 lines of TypeScript
-across 5, and 175 tests that run in about 1.5 seconds with no network and no TeX installation.
+**Size, for orientation:** 3,790 lines of Python across 15 modules, 836 lines of TypeScript
+across 5, and 207 tests that run in about 1.5 seconds with no network and no TeX installation.
 
 ---
 
@@ -270,6 +270,11 @@ Four command names are shared across the process boundary:
 together. The TypeScript response types in `client.ts` (`BibEntryStatus`, `GateResult`, …) are
 hand-mirrored from the Python dicts and have the same property.
 
+A fifth handler, `aurelius.compilePdf` (`COMPILE_PDF_COMMAND`), is registered on the server but
+has no consumer — not in `client.ts`, not in `extension.ts`, not contributed in `package.json`.
+`check_command_contract.py` does not catch it because it checks that every *client* name exists
+on the server, not the reverse. It is reachable only by a client that sends the id directly.
+
 ---
 
 ## 9. Invariants
@@ -376,7 +381,7 @@ to the embedded runtime.
 
 ## 12. Testing
 
-175 tests, ~1.5 seconds, **no network and no TeX installation required**. That is a hard
+207 tests, ~1.5 seconds, **no network and no TeX installation required**. That is a hard
 constraint, not a nice property — it is what lets CI prove the engine works with verification
 unavailable, which is the degraded mode most users will first experience.
 
